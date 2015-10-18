@@ -121,13 +121,13 @@ class TaskArgs2{
 	TaskArgs2(const Array<T> &x, Array<T> &y){
 		
 		this-> x_fid = x.fid;
-                this-> y_fid = y.fid;
+    this-> y_fid = y.fid;
 	}
 
-        TaskArgs2(Array<T> &x, const Array<T> &y){
-                this-> x_fid = x.fid;
-                this-> y_fid = y.fid;
-        }
+  TaskArgs2(Array<T> &x, const Array<T> &y){
+    this-> x_fid = x.fid;
+    this-> y_fid = y.fid;
+  }
 
 };
 
@@ -220,38 +220,38 @@ void spmv(const SpMatrix &A, const Array<T> &x, Array<T> &A_x,
 
 template<typename T>
 void spmv_task(const Task *task,
-	       const std::vector<PhysicalRegion> &regions,
-	       Context ctx, HighLevelRuntime *runtime){
+	             const std::vector<PhysicalRegion> &regions,
+	             Context ctx, HighLevelRuntime *runtime){
 
 	assert(regions.size() == 4);
-        assert(task->regions.size() == 4);
+  assert(task->regions.size() == 4);
 
-        const  TaskArgs1<T> task_args = *((const TaskArgs1<T>*)task->args);
+  const  TaskArgs1<T> task_args = *((const TaskArgs1<T>*)task->args);
 
 	int max_nzeros = task_args.scalar;
 
-        RegionAccessor<AccessorType::Generic, int64_t> acc_num_nzeros =
-        regions[0].get_field_accessor(task_args.A_row_fid).template typeify<int64_t>();
+  RegionAccessor<AccessorType::Generic, int64_t> acc_num_nzeros =
+    regions[0].get_field_accessor(task_args.A_row_fid).template typeify<int64_t>();
 
-        RegionAccessor<AccessorType::Generic, int64_t> acc_col =
-        regions[1].get_field_accessor(task_args.A_col_fid).template typeify<int64_t>();
+  RegionAccessor<AccessorType::Generic, int64_t> acc_col =
+    regions[1].get_field_accessor(task_args.A_col_fid).template typeify<int64_t>();
 
-        RegionAccessor<AccessorType::Generic, T> acc_vals =
-        regions[1].get_field_accessor(task_args.A_val_fid).template typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_vals =
+    regions[1].get_field_accessor(task_args.A_val_fid).template typeify<T>();
 
 	RegionAccessor<AccessorType::Generic, T> acc_x =
-        regions[2].get_field_accessor(task_args.x_fid).template typeify<T>();
+    regions[2].get_field_accessor(task_args.x_fid).template typeify<T>();
 
 	RegionAccessor<AccessorType::Generic, T> acc_Ax =
-        regions[3].get_field_accessor(task_args.Ax_fid).template typeify<T>();
+    regions[3].get_field_accessor(task_args.Ax_fid).template typeify<T>();
 
-        Domain row_dom = runtime->get_index_space_domain(ctx,
-                         task->regions[0].region.get_index_space());
-        Rect<1> row_rect = row_dom.get_rect<1>();
+  Domain row_dom = runtime->get_index_space_domain(ctx,
+                   task->regions[0].region.get_index_space());
+  Rect<1> row_rect = row_dom.get_rect<1>();
 
-        Domain elem_dom = runtime->get_index_space_domain(ctx,
-                          task->regions[1].region.get_index_space());
-        Rect<1> elem_rect = elem_dom.get_rect<1>();
+  Domain elem_dom = runtime->get_index_space_domain(ctx,
+                    task->regions[1].region.get_index_space());
+  Rect<1> elem_rect = elem_dom.get_rect<1>();
 
 	// apply matrix vector multiplication
 	{
@@ -286,13 +286,13 @@ void spmv_task(const Task *task,
 }
 
 static bool dense_spmv(int max_nzeros, const Rect<1> &subgrid_bounds, 
-		       		   const Rect<1> &elem_bounds,
+		       		     const Rect<1> &elem_bounds,
 		               const Rect<1> &vec_bounds,
-		       RegionAccessor<AccessorType::Generic,int64_t> &fa_nzero,
-                       RegionAccessor<AccessorType::Generic,int64_t> &fa_col,
-                       RegionAccessor<AccessorType::Generic,double> &fa_val,
-                       RegionAccessor<AccessorType::Generic,double> &fa_x,
-                       RegionAccessor<AccessorType::Generic,double> &fa_ax)
+		               RegionAccessor<AccessorType::Generic,int64_t> &fa_nzero,
+                   RegionAccessor<AccessorType::Generic,int64_t> &fa_col,
+                   RegionAccessor<AccessorType::Generic,double> &fa_val,
+                   RegionAccessor<AccessorType::Generic,double> &fa_x,
+                   RegionAccessor<AccessorType::Generic,double> &fa_ax)
 {
   Rect<1> subrect;
   ByteOffset in_offsets[1], offsets[1];
@@ -409,25 +409,25 @@ void spmv_task<double>(const Task *task,
   	DomainPoint pir;
   	pir.dim = 1;
   	for (int i = 0; i < volume; i++) {
-    		double sum = 0.0;
-		int limit = acc_num_nzeros.read(DomainPoint::from_point<1>(itr1.p));
+    	double sum = 0.0;
+		  int limit = acc_num_nzeros.read(DomainPoint::from_point<1>(itr1.p));
 
-    		for (int j = 0; j < limit; j++) {
+    	for (int j = 0; j < limit; j++) {
 
-			int ind = acc_col.read(DomainPoint::from_point<1>(itr2.p));
-                                pir.point_data[0] = ind;
+			  int ind = acc_col.read(DomainPoint::from_point<1>(itr2.p));
+        pir.point_data[0] = ind;
 
-                                sum += acc_vals.read(DomainPoint::from_point<1>(itr2.p)) * acc_x.read(pir);
-                                itr2++;
-                        }
+        sum += acc_vals.read(DomainPoint::from_point<1>(itr2.p)) * acc_x.read(pir);
+        itr2++;
+      }
 
-                        acc_Ax.write(DomainPoint::from_point<1>(itr1.p), sum);
-                        itr1++;
-                        itr2.p.x[0] = itr2.p.x[0] + (max_nzeros - limit);
+      acc_Ax.write(DomainPoint::from_point<1>(itr1.p), sum);
+      itr1++;
+      itr2.p.x[0] = itr2.p.x[0] + (max_nzeros - limit);
   	}
   }
  
- return;
+  return;
 }
 
 // b -= Ax
@@ -435,25 +435,25 @@ template<typename T>
 void subtract_inplace(Array<T> &b, const Array<T> &A_x, Future coef, 
                       const Predicate &pred, Context ctx, HighLevelRuntime *runtime){
 
-        ArgumentMap arg_map;
+  ArgumentMap arg_map;
 
 	TaskArgs2<T> subtract_args(b, A_x);
 	
-        IndexLauncher subtract_launcher(SUBTRACT_INPLACE_TASK_ID, b.color_domain,
-                              TaskArgument(&subtract_args, sizeof(subtract_args)),
-                              arg_map, pred);
+  IndexLauncher subtract_launcher(SUBTRACT_INPLACE_TASK_ID, b.color_domain,
+                                  TaskArgument(&subtract_args, sizeof(subtract_args)),
+                                  arg_map, pred);
 
 	subtract_launcher.add_future(coef);
 
-        subtract_launcher.add_region_requirement(
-                        RegionRequirement(b.lp, 0, READ_WRITE, EXCLUSIVE, b.lr));
-        subtract_launcher.region_requirements[0].add_field(b.fid);
+  subtract_launcher.add_region_requirement(
+                  RegionRequirement(b.lp, 0, READ_WRITE, EXCLUSIVE, b.lr));
+  subtract_launcher.region_requirements[0].add_field(b.fid);
 
-        subtract_launcher.add_region_requirement(
-                        RegionRequirement(A_x.lp, 0, READ_ONLY, EXCLUSIVE, A_x.lr));
-        subtract_launcher.region_requirements[1].add_field(A_x.fid);
+  subtract_launcher.add_region_requirement(
+                  RegionRequirement(A_x.lp, 0, READ_ONLY, EXCLUSIVE, A_x.lr));
+  subtract_launcher.region_requirements[1].add_field(A_x.fid);
 
-        runtime->execute_index_space(ctx, subtract_launcher);
+  runtime->execute_index_space(ctx, subtract_launcher);
 
 	return;
 }
@@ -462,69 +462,69 @@ void subtract_inplace(Array<T> &b, const Array<T> &A_x, Future coef,
 template<typename T>
 void subtract(const Array<T> &b, const Array<T> &A_x, Array<T> &r, T coef, Context ctx, HighLevelRuntime *runtime){
 
-        ArgumentMap arg_map;
+  ArgumentMap arg_map;
 
 	TaskArgs2<T> subtract_args(b, A_x, r, coef);
 	
-        IndexLauncher subtract_launcher(SUBTRACT_TASK_ID, b.color_domain,
-                                    TaskArgument(&subtract_args, sizeof(subtract_args)), arg_map);
+  IndexLauncher subtract_launcher(SUBTRACT_TASK_ID, b.color_domain,
+                              TaskArgument(&subtract_args, sizeof(subtract_args)), arg_map);
 
-        subtract_launcher.add_region_requirement(
-                        RegionRequirement(b.lp, 0, READ_ONLY, EXCLUSIVE, b.lr));
-        subtract_launcher.region_requirements[0].add_field(b.fid);
+  subtract_launcher.add_region_requirement(
+                  RegionRequirement(b.lp, 0, READ_ONLY, EXCLUSIVE, b.lr));
+  subtract_launcher.region_requirements[0].add_field(b.fid);
 
-        subtract_launcher.add_region_requirement(
-                        RegionRequirement(A_x.lp, 0, READ_ONLY, EXCLUSIVE, A_x.lr));
-        subtract_launcher.region_requirements[1].add_field(A_x.fid);
+  subtract_launcher.add_region_requirement(
+                  RegionRequirement(A_x.lp, 0, READ_ONLY, EXCLUSIVE, A_x.lr));
+  subtract_launcher.region_requirements[1].add_field(A_x.fid);
 
-        subtract_launcher.add_region_requirement(
-                        RegionRequirement(r.lp, 0, WRITE_DISCARD, EXCLUSIVE, r.lr));
-        subtract_launcher.region_requirements[2].add_field(r.fid);
+  subtract_launcher.add_region_requirement(
+                  RegionRequirement(r.lp, 0, WRITE_DISCARD, EXCLUSIVE, r.lr));
+  subtract_launcher.region_requirements[2].add_field(r.fid);
 
-        runtime->execute_index_space(ctx, subtract_launcher);
+  runtime->execute_index_space(ctx, subtract_launcher);
 
 	return;
 }
 
 template<typename T>
 void subtract_task(const Task *task,
-               const std::vector<PhysicalRegion> &regions,
-               Context ctx, HighLevelRuntime *runtime){
+                   const std::vector<PhysicalRegion> &regions,
+                   Context ctx, HighLevelRuntime *runtime){
 
-        assert(regions.size() == 3);
-        assert(task->regions.size() == 3);
+  assert(regions.size() == 3);
+  assert(task->regions.size() == 3);
 
-        const TaskArgs2<T> task_args = *((const TaskArgs2<T>*)task->args);
+  const TaskArgs2<T> task_args = *((const TaskArgs2<T>*)task->args);
 
 	T alpha = task_args.scalar;
 
-        RegionAccessor<AccessorType::Generic, T> acc_x =
-        regions[0].get_field_accessor(task_args.x_fid).template typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_x =
+  regions[0].get_field_accessor(task_args.x_fid).template typeify<T>();
 
-        RegionAccessor<AccessorType::Generic, T> acc_y =
-        regions[1].get_field_accessor(task_args.y_fid).template typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_y =
+  regions[1].get_field_accessor(task_args.y_fid).template typeify<T>();
 
-        RegionAccessor<AccessorType::Generic, T> acc_z =
-        regions[2].get_field_accessor(task_args.z_fid).template typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_z =
+  regions[2].get_field_accessor(task_args.z_fid).template typeify<T>();
 
-        Domain dom = runtime->get_index_space_domain(ctx,
-                         task->regions[0].region.get_index_space());
-        Rect<1> rect = dom.get_rect<1>();
+  Domain dom = runtime->get_index_space_domain(ctx,
+                   task->regions[0].region.get_index_space());
+  Rect<1> rect = dom.get_rect<1>();
 
-        // apply vector subtraction
-        {
-                GenericPointInRectIterator<1> itr1(rect);
+  // apply vector subtraction
+  {
+    GenericPointInRectIterator<1> itr1(rect);
 
-                for(int i=0; i< rect.volume(); i++){
-			T result = acc_x.read(DomainPoint::from_point<1>(itr1.p)) - 
-					alpha * acc_y.read(DomainPoint::from_point<1>(itr1.p));
-			
-			 acc_z.write(DomainPoint::from_point<1>(itr1.p), result);
-			 itr1++;
-                 }
-        }
+    for(int i=0; i< rect.volume(); i++){
+	    T result = acc_x.read(DomainPoint::from_point<1>(itr1.p)) - 
+		  alpha * acc_y.read(DomainPoint::from_point<1>(itr1.p));
+	
+	    acc_z.write(DomainPoint::from_point<1>(itr1.p), result);
+	    itr1++;
+    }
+  }
 
-        return;
+  return;
 }
 
 template<typename T>
@@ -784,18 +784,17 @@ void subtract_inplace_task<double>(const Task *task,
 template<typename T>
 void copy(const Array<T> &r, Array<T> &p, Context ctx, HighLevelRuntime *runtime){
 
+  CopyLauncher equal_launcher;
 
-        CopyLauncher equal_launcher;
+  equal_launcher.add_copy_requirements(
+                  RegionRequirement(r.lr, READ_ONLY, EXCLUSIVE, r.lr),
+	RegionRequirement(p.lr, WRITE_DISCARD, EXCLUSIVE, p.lr));
 
-        equal_launcher.add_copy_requirements(
-                        RegionRequirement(r.lr, READ_ONLY, EXCLUSIVE, r.lr),
-			RegionRequirement(p.lr, WRITE_DISCARD, EXCLUSIVE, p.lr));
+  equal_launcher.src_requirements[0].add_field(r.fid);
 
-        equal_launcher.src_requirements[0].add_field(r.fid);
+  equal_launcher.dst_requirements[0].add_field(p.fid);
 
-        equal_launcher.dst_requirements[0].add_field(p.fid);
-
-        runtime->issue_copy_operation(ctx, equal_launcher);
+  runtime->issue_copy_operation(ctx, equal_launcher);
 	return;
 }
 
@@ -804,25 +803,25 @@ template<typename T>
 Future dot(const Array<T> &x, Array<T> &y, const Predicate &pred,
            const Future &false_result, Context ctx, HighLevelRuntime *runtime){
 	
-        ArgumentMap arg_map;
+  ArgumentMap arg_map;
 
 	TaskArgs2<T> dot_args(x, y);
 
-        IndexLauncher dot_launcher(DOT_TASK_ID, x.color_domain,
-                                    TaskArgument(&dot_args, sizeof(dot_args)), 
-                                    arg_map, pred);
+  IndexLauncher dot_launcher(DOT_TASK_ID, x.color_domain,
+                              TaskArgument(&dot_args, sizeof(dot_args)), 
+                              arg_map, pred);
 
-        dot_launcher.add_region_requirement(
-                        RegionRequirement(x.lp, 0, READ_ONLY, EXCLUSIVE, x.lr));
-        dot_launcher.region_requirements[0].add_field(x.fid);
+  dot_launcher.add_region_requirement(
+                  RegionRequirement(x.lp, 0, READ_ONLY, EXCLUSIVE, x.lr));
+  dot_launcher.region_requirements[0].add_field(x.fid);
 
-        dot_launcher.add_region_requirement(
-                        RegionRequirement(y.lp, 0, READ_ONLY, EXCLUSIVE, y.lr));
-        dot_launcher.region_requirements[1].add_field(y.fid);
+  dot_launcher.add_region_requirement(
+                  RegionRequirement(y.lp, 0, READ_ONLY, EXCLUSIVE, y.lr));
+  dot_launcher.region_requirements[1].add_field(y.fid);
 
-        dot_launcher.set_predicate_false_future(false_result);
+  dot_launcher.set_predicate_false_future(false_result);
 
-        Future result = runtime->execute_index_space(ctx, dot_launcher, REDUCE_ID);
+  Future result = runtime->execute_index_space(ctx, dot_launcher, REDUCE_ID);
 	
 	return(result);
 }
@@ -832,24 +831,24 @@ T  dot_task(const Task *task,
             const std::vector<PhysicalRegion> &regions,
             Context ctx, HighLevelRuntime *runtime){  
 
-        assert(regions.size() == 2);
-        assert(task->regions.size() == 2);
+  assert(regions.size() == 2);
+  assert(task->regions.size() == 2);
 
-        const TaskArgs2<T> task_args = *((const TaskArgs2<T>*)task->args);
-                
-        RegionAccessor<AccessorType::Generic, T> acc_x =
-        regions[0].get_field_accessor(task_args.x_fid).template typeify<T>();
+  const TaskArgs2<T> task_args = *((const TaskArgs2<T>*)task->args);
+          
+  RegionAccessor<AccessorType::Generic, T> acc_x =
+  regions[0].get_field_accessor(task_args.x_fid).template typeify<T>();
 
-        RegionAccessor<AccessorType::Generic, T> acc_y =
-        regions[1].get_field_accessor(task_args.y_fid).template typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_y =
+  regions[1].get_field_accessor(task_args.y_fid).template typeify<T>();
 
-        Domain dom = runtime->get_index_space_domain(ctx,
-                         task->regions[0].region.get_index_space());
-        Rect<1> rect = dom.get_rect<1>();
+  Domain dom = runtime->get_index_space_domain(ctx,
+                   task->regions[0].region.get_index_space());
+  Rect<1> rect = dom.get_rect<1>();
 	
 	T sum = 0.0;
         // now apply the dot product using reduction operator!!!
-        {
+  {
 		GenericPointInRectIterator<1> itr1(rect);
 
 		for(int i=0; i < rect.volume(); i++){
@@ -858,8 +857,8 @@ T  dot_task(const Task *task,
 
 			itr1++;				
 		}
-        }
-        return(sum);
+  }
+  return(sum);
 }
 
 static bool dense_dot(const Rect<1> &subgrid_bounds, double &result, 
@@ -984,28 +983,28 @@ double dot_task<double>(const Task *task,
 template<typename T>
 void add(const Array<T> &x, const Array<T> &y, Array<T> &z, Future coef, Context ctx, HighLevelRuntime *runtime){
 
-        ArgumentMap arg_map;
+  ArgumentMap arg_map;
 
 	TaskArgs2<T> add_args(x, y, z);
 
-        IndexLauncher add_launcher(ADD_TASK_ID, x.color_domain,
-                                    TaskArgument(&add_args, sizeof(add_args)), arg_map);
+  IndexLauncher add_launcher(ADD_TASK_ID, x.color_domain,
+                             TaskArgument(&add_args, sizeof(add_args)), arg_map);
 
 	add_launcher.add_future(coef);
 
-        add_launcher.add_region_requirement(
-                        RegionRequirement(x.lp, 0, READ_ONLY, EXCLUSIVE, x.lr));
-        add_launcher.region_requirements[0].add_field(x.fid);
+  add_launcher.add_region_requirement(
+                  RegionRequirement(x.lp, 0, READ_ONLY, EXCLUSIVE, x.lr));
+  add_launcher.region_requirements[0].add_field(x.fid);
 
-        add_launcher.add_region_requirement(
-                        RegionRequirement(y.lp, 0, READ_ONLY, EXCLUSIVE, y.lr));
-        add_launcher.region_requirements[1].add_field(y.fid);
+  add_launcher.add_region_requirement(
+                  RegionRequirement(y.lp, 0, READ_ONLY, EXCLUSIVE, y.lr));
+  add_launcher.region_requirements[1].add_field(y.fid);
 
-        add_launcher.add_region_requirement(
-                        RegionRequirement(z.lp, 0, WRITE_DISCARD, EXCLUSIVE, z.lr));
-        add_launcher.region_requirements[2].add_field(z.fid);
+  add_launcher.add_region_requirement(
+                  RegionRequirement(z.lp, 0, WRITE_DISCARD, EXCLUSIVE, z.lr));
+  add_launcher.region_requirements[2].add_field(z.fid);
 
-        runtime->execute_index_space(ctx, add_launcher);
+  runtime->execute_index_space(ctx, add_launcher);
 
 	return;
 }
@@ -1013,25 +1012,25 @@ void add(const Array<T> &x, const Array<T> &y, Array<T> &z, Future coef, Context
 template<typename T>
 void add_inplace(Array<T> &x, const Array<T> &y, Future coef, 
                  const Predicate &pred, Context ctx, HighLevelRuntime *runtime){
-        ArgumentMap arg_map;
+  ArgumentMap arg_map;
 
 	TaskArgs2<T> add_args(x, y);
 
-        IndexLauncher add_launcher(ADD_INPLACE_TASK_ID, x.color_domain,
-                                    TaskArgument(&add_args, sizeof(add_args)), 
-                                    arg_map, pred);
+  IndexLauncher add_launcher(ADD_INPLACE_TASK_ID, x.color_domain,
+                             TaskArgument(&add_args, sizeof(add_args)), 
+                             arg_map, pred);
 
 	add_launcher.add_future(coef);
 
-        add_launcher.add_region_requirement(
-                        RegionRequirement(x.lp, 0, READ_WRITE, EXCLUSIVE, x.lr));
-        add_launcher.region_requirements[0].add_field(x.fid);
+  add_launcher.add_region_requirement(
+                  RegionRequirement(x.lp, 0, READ_WRITE, EXCLUSIVE, x.lr));
+  add_launcher.region_requirements[0].add_field(x.fid);
 
-        add_launcher.add_region_requirement(
-                        RegionRequirement(y.lp, 0, READ_ONLY, EXCLUSIVE, y.lr));
-        add_launcher.region_requirements[1].add_field(y.fid);
+  add_launcher.add_region_requirement(
+                  RegionRequirement(y.lp, 0, READ_ONLY, EXCLUSIVE, y.lr));
+  add_launcher.region_requirements[1].add_field(y.fid);
 
-        runtime->execute_index_space(ctx, add_launcher);
+  runtime->execute_index_space(ctx, add_launcher);
 
 	return;
 
@@ -1042,43 +1041,43 @@ void add_task(const Task *task,
                const std::vector<PhysicalRegion> &regions,
                Context ctx, HighLevelRuntime *runtime){
 
-        assert(regions.size() == 3);
-        assert(task->regions.size() == 3);
-        assert(task->futures.size() == 1);
+  assert(regions.size() == 3);
+  assert(task->regions.size() == 3);
+  assert(task->futures.size() == 1);
 
-        const TaskArgs2<T> task_args = *((const TaskArgs2<T>*)task->args);
+  const TaskArgs2<T> task_args = *((const TaskArgs2<T>*)task->args);
 
-  	T alpha;
-  	Future dummy = task->futures[0];
-  	alpha = dummy.get_result<T>();
+  T alpha;
+  Future dummy = task->futures[0];
+  alpha = dummy.get_result<T>();
 
-        RegionAccessor<AccessorType::Generic, T> acc_x =
-        regions[0].get_field_accessor(task_args.x_fid).template typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_x =
+  regions[0].get_field_accessor(task_args.x_fid).template typeify<T>();
 
-        RegionAccessor<AccessorType::Generic, T> acc_y =
-        regions[1].get_field_accessor(task_args.y_fid).template typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_y =
+  regions[1].get_field_accessor(task_args.y_fid).template typeify<T>();
 
-        RegionAccessor<AccessorType::Generic, T> acc_z =
-        regions[2].get_field_accessor(task_args.z_fid).template typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_z =
+  regions[2].get_field_accessor(task_args.z_fid).template typeify<T>();
 
-        Domain dom = runtime->get_index_space_domain(ctx,
-                         task->regions[0].region.get_index_space());
-        Rect<1> rect = dom.get_rect<1>();
+  Domain dom = runtime->get_index_space_domain(ctx,
+                   task->regions[0].region.get_index_space());
+  Rect<1> rect = dom.get_rect<1>();
 
-        // apply vector addition
-        {
-                GenericPointInRectIterator<1> itr1(rect);
+  // apply vector addition
+  {
+    GenericPointInRectIterator<1> itr1(rect);
 
-                for(int i=0; i< rect.volume(); i++){
-                        T result = acc_x.read(DomainPoint::from_point<1>(itr1.p)) +
-                                        alpha * acc_y.read(DomainPoint::from_point<1>(itr1.p));
+    for(int i=0; i< rect.volume(); i++){
+      T result = acc_x.read(DomainPoint::from_point<1>(itr1.p)) +
+                      alpha * acc_y.read(DomainPoint::from_point<1>(itr1.p));
 
-                         acc_z.write(DomainPoint::from_point<1>(itr1.p), result);
-                         itr1++;
-                 }
-        }
+      acc_z.write(DomainPoint::from_point<1>(itr1.p), result);
+      itr1++;
+    }
+  }
 
-        return;
+  return;
 }
 
 template<typename T>
@@ -1343,21 +1342,21 @@ void axpy_inplace(const Array<T> &x, Array<T> &y, Future coef,
 
 	TaskArgs2<T> add_args(x, y);
 
-        IndexLauncher add_launcher(AXPY_INPLACE_TASK_ID, x.color_domain,
-                                    TaskArgument(&add_args, sizeof(add_args)), 
-                                    arg_map, pred);
+  IndexLauncher add_launcher(AXPY_INPLACE_TASK_ID, x.color_domain,
+                              TaskArgument(&add_args, sizeof(add_args)), 
+                              arg_map, pred);
 
 	add_launcher.add_future(coef);
 
-        add_launcher.add_region_requirement(
-                        RegionRequirement(x.lp, 0, READ_ONLY, EXCLUSIVE, x.lr));
-        add_launcher.region_requirements[0].add_field(x.fid);
+  add_launcher.add_region_requirement(
+                  RegionRequirement(x.lp, 0, READ_ONLY, EXCLUSIVE, x.lr));
+  add_launcher.region_requirements[0].add_field(x.fid);
 
-        add_launcher.add_region_requirement(
-                        RegionRequirement(y.lp, 0, READ_WRITE, EXCLUSIVE, y.lr));
-        add_launcher.region_requirements[1].add_field(y.fid);
+  add_launcher.add_region_requirement(
+                  RegionRequirement(y.lp, 0, READ_WRITE, EXCLUSIVE, y.lr));
+  add_launcher.region_requirements[1].add_field(y.fid);
 
-        runtime->execute_index_space(ctx, add_launcher);
+  runtime->execute_index_space(ctx, add_launcher);
 
 	return;
 
@@ -1589,38 +1588,38 @@ static void RegisterOperatorTasks(void) {
 	AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "spmv");
 
 	HighLevelRuntime::register_legion_task<subtract_task<T> >(SUBTRACT_TASK_ID,
-        Processor::LOC_PROC, true/*single*/, true/*index*/,
-        AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "subtract");
+  Processor::LOC_PROC, true/*single*/, true/*index*/,
+  AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "subtract");
 
-        HighLevelRuntime::register_legion_task<subtract_inplace_task<T> >(SUBTRACT_INPLACE_TASK_ID,
-        Processor::LOC_PROC, true/*single*/, true/*index*/,
-        AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "subtract_inplace");
+  HighLevelRuntime::register_legion_task<subtract_inplace_task<T> >(SUBTRACT_INPLACE_TASK_ID,
+  Processor::LOC_PROC, true/*single*/, true/*index*/,
+  AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "subtract_inplace");
 
 	HighLevelRuntime::register_legion_task<T, dot_task<T> >(DOT_TASK_ID,
-        Processor::LOC_PROC, true/*single*/, true/*index*/, 
-        AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "dotproduct");
+  Processor::LOC_PROC, true/*single*/, true/*index*/, 
+  AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "dotproduct");
 
 	HighLevelRuntime::register_reduction_op<FutureSum>(REDUCE_ID);
 
 	HighLevelRuntime::register_legion_task<add_task<T> >(ADD_TASK_ID,
-        Processor::LOC_PROC, true/*single*/, true/*index*/,
-        AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "add");
+  Processor::LOC_PROC, true/*single*/, true/*index*/,
+  AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "add");
 
-        HighLevelRuntime::register_legion_task<add_inplace_task<T> >(ADD_INPLACE_TASK_ID,
-        Processor::LOC_PROC, true/*single*/, true/*index*/,
-        AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "add_inplace");
+  HighLevelRuntime::register_legion_task<add_inplace_task<T> >(ADD_INPLACE_TASK_ID,
+  Processor::LOC_PROC, true/*single*/, true/*index*/,
+  AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "add_inplace");
 
-        HighLevelRuntime::register_legion_task<axpy_inplace_task<T> >(AXPY_INPLACE_TASK_ID,
-        Processor::LOC_PROC, true/*single*/, true/*index*/,
-        AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "axpy_inplace");
+  HighLevelRuntime::register_legion_task<axpy_inplace_task<T> >(AXPY_INPLACE_TASK_ID,
+  Processor::LOC_PROC, true/*single*/, true/*index*/,
+  AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "axpy_inplace");
 
 	HighLevelRuntime::register_legion_task<T, compute_scalar_task<T> >(DIVIDE_TASK_ID,
-        Processor::LOC_PROC, true/*single*/, true/*index*/, 
-        AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "compute_scalar");
+  Processor::LOC_PROC, true/*single*/, true/*index*/, 
+  AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "compute_scalar");
 
-        HighLevelRuntime::register_legion_task<bool, test_convergence_task<T> >(CONVERGENCE_TASK_ID,
-        Processor::LOC_PROC, true/*single*/, true/*index*/,
-        AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "test_convergence");
+  HighLevelRuntime::register_legion_task<bool, test_convergence_task<T> >(CONVERGENCE_TASK_ID,
+  Processor::LOC_PROC, true/*single*/, true/*index*/,
+  AUTO_GENERATE_ID, TaskConfigOptions(true/*leaf*/), "test_convergence");
 
 	return;
 }

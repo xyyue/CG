@@ -20,12 +20,12 @@ class CGSolver{
 	
 	public:
 	bool Solve(const SpMatrix &A,
-		   const Array<T> &b,
-		   Array<T> &x,
-		   int nitermax,
-		   T threshold,
-		   Context ctx,
-		   HighLevelRuntime *runtime);
+		         const Array<T> &b,
+		         Array<T> &x,
+		         int nitermax,
+		         T threshold,
+		         Context ctx,
+		         HighLevelRuntime *runtime);
 
 	int GetNumberIterations(void) { return niter;}
 	T GetL2Norm(void) { return L2normr;}
@@ -37,10 +37,10 @@ bool CGSolver<T>::Solve(const SpMatrix &A,
                    Array<T> &x,
                    int nitermax,
                    T threshold,
-		   Context ctx, 
-		   HighLevelRuntime *runtime)
+		               Context ctx, 
+                   HighLevelRuntime *runtime)
 {
-        bool converged = false;
+  bool converged = false;
 	assert(A.nrows == b.size);
 	assert(b.size == x.size);
 		   
@@ -50,7 +50,7 @@ bool CGSolver<T>::Solve(const SpMatrix &A,
 	Array<T> p(x.size, x.nparts, ctx, runtime);
 	Array<T> A_p(x.size, x.nparts, ctx, runtime);
 
-        Predicate loop_pred = Predicate::TRUE_PRED;
+  Predicate loop_pred = Predicate::TRUE_PRED;
 
 	// Ap = A * x	
 	spmv(A, x, A_p, loop_pred, ctx, runtime);
@@ -73,10 +73,10 @@ bool CGSolver<T>::Solve(const SpMatrix &A,
 	//std::cout<<"Iteration"<<"    "<<"L2norm"<<std::endl;
 	//std::cout<<niter<<"            "<<std::setprecision(16)<<L2normr<<std::endl;
 
-        Future r2_old, pAp, alpha, r2_new, beta; 
+  Future r2_old, pAp, alpha, r2_new, beta; 
 #ifdef PREDICATED_EXECUTION
-        std::deque<Future>  pending_norms;
-        const int max_norm_depth = runtime->get_tunable_value(ctx, PREDICATED_TUNABLE);
+  std::deque<Future>  pending_norms;
+  const int max_norm_depth = runtime->get_tunable_value(ctx, PREDICATED_TUNABLE);
 #endif
 
 	std::cout<<"Iterating..."<<std::endl;
@@ -102,31 +102,31 @@ bool CGSolver<T>::Solve(const SpMatrix &A,
 		add_inplace(x, p, alpha, loop_pred, ctx, runtime);
 	
 		// r_old = r_old - alpha * A_p
-                subtract_inplace(r_old, A_p, alpha, loop_pred, ctx, runtime);
+    subtract_inplace(r_old, A_p, alpha, loop_pred, ctx, runtime);
 
 		r2_new = dot(r_old, r_old, loop_pred, r2_new, ctx, runtime);
 
 		beta = compute_scalar<T>(r2_new, r2_old, loop_pred, beta, ctx, runtime);
 	
 		// p = r_old + beta*p
-                axpy_inplace(r_old, p, beta, loop_pred, ctx, runtime);
+    axpy_inplace(r_old, p, beta, loop_pred, ctx, runtime);
 #ifdef PREDICATED_EXECUTION
-                Future norm = dot(r_old, r_old, loop_pred, 
-                    pending_norms.empty() ? Future() : pending_norms.back(), ctx ,runtime);
-                loop_pred = test_convergence(norm, L2normr0, threshold, 
-                    loop_pred, ctx, runtime);
-                pending_norms.push_back(norm);
-                if (pending_norms.size() == max_norm_depth) {
-                  // Pop the next future off the stack and wait for it
-                  norm = pending_norms.front();
-                  pending_norms.pop_front();
-                  L2normr = sqrt(norm.get_result<double>());
-                  converged = ((L2normr/L2normr0) < threshold);
-                  if (converged) {
-                    std::cout<<"Converged! :)"<<std::endl;
-                    break;
-                  }
-                }
+    Future norm = dot(r_old, r_old, loop_pred, 
+                      pending_norms.empty() ? Future() : pending_norms.back(), ctx ,runtime);
+    loop_pred = test_convergence(norm, L2normr0, threshold, 
+        loop_pred, ctx, runtime);
+    pending_norms.push_back(norm);
+    if (pending_norms.size() == max_norm_depth) {
+      // Pop the next future off the stack and wait for it
+      norm = pending_norms.front();
+      pending_norms.pop_front();
+      L2normr = sqrt(norm.get_result<double>());
+      converged = ((L2normr/L2normr0) < threshold);
+      if (converged) {
+        std::cout<<"Converged! :)"<<std::endl;
+        break;
+      }
+    }
 #else
 		L2normr = L2norm(r_old, ctx, runtime);
 #if 0
@@ -145,11 +145,11 @@ bool CGSolver<T>::Solve(const SpMatrix &A,
 	//T dummy = beta.get_result<T>();
 
 	// destroy the objects
-        r_old.DestroyArray(ctx, runtime);
-        p.DestroyArray(ctx, runtime);
-        A_p.DestroyArray(ctx, runtime);
+  r_old.DestroyArray(ctx, runtime);
+  p.DestroyArray(ctx, runtime);
+  A_p.DestroyArray(ctx, runtime);
 	
-        return converged;
+  return converged;
 } 	
 
 #endif
