@@ -65,11 +65,11 @@ enum TaksIDs{
 	COPY_TASK_ID = 6,
 	DOT_TASK_ID = 7,
 	ADD_TASK_ID = 8,
-        ADD_INPLACE_TASK_ID = 9,
-        AXPY_INPLACE_TASK_ID = 10,
+  ADD_INPLACE_TASK_ID = 9,
+  AXPY_INPLACE_TASK_ID = 10,
 	L2NORM_TASK_ID = 11,
 	DIVIDE_TASK_ID = 12,
-        CONVERGENCE_TASK_ID = 13,
+  CONVERGENCE_TASK_ID = 13,
 };
 
 enum OpIDs{
@@ -191,27 +191,21 @@ void spmv(const SpMatrix &A, const Array<T> &x, Array<T> &A_x,
 
 	TaskArgs1<T> spmv_args(A, x, A_x, A.max_nzeros);
 
-	IndexLauncher spmv_launcher(SPMV_TASK_ID, x.color_domain,
-				    TaskArgument(&spmv_args, sizeof(spmv_args)), 
-                                    arg_map, pred);
+	IndexLauncher spmv_launcher(SPMV_TASK_ID, x.color_domain, TaskArgument(&spmv_args, sizeof(spmv_args)), arg_map, pred);
 
-	spmv_launcher.add_region_requirement(
-			RegionRequirement(A.row_lp, 0, READ_ONLY, EXCLUSIVE, A.row_lr));
+	spmv_launcher.add_region_requirement( RegionRequirement(A.row_lp, 0, READ_ONLY, EXCLUSIVE, A.row_lr));
 	spmv_launcher.region_requirements[0].add_field(A.row_fid);
 
-	spmv_launcher.add_region_requirement(
-                        RegionRequirement(A.elem_lp, 0, READ_ONLY, EXCLUSIVE, A.elem_lr));
+	spmv_launcher.add_region_requirement( RegionRequirement(A.elem_lp, 0, READ_ONLY, EXCLUSIVE, A.elem_lr));
 	spmv_launcher.region_requirements[1].add_field(A.val_fid);
 	spmv_launcher.region_requirements[1].add_field(A.col_fid); 
 
 	// Note: all elements of vector x is given to each process
-	spmv_launcher.add_region_requirement(
-                        RegionRequirement(x.lr, 0, READ_ONLY, EXCLUSIVE, x.lr));
-        spmv_launcher.region_requirements[2].add_field(x.fid);
+	spmv_launcher.add_region_requirement( RegionRequirement(x.lr, 0, READ_ONLY, EXCLUSIVE, x.lr));
+  spmv_launcher.region_requirements[2].add_field(x.fid);
 
-	spmv_launcher.add_region_requirement(
-                        RegionRequirement(A_x.lp, 0, WRITE_DISCARD, EXCLUSIVE, A_x.lr));
-        spmv_launcher.region_requirements[3].add_field(A_x.fid);
+	spmv_launcher.add_region_requirement( RegionRequirement(A_x.lp, 0, WRITE_DISCARD, EXCLUSIVE, A_x.lr));
+  spmv_launcher.region_requirements[3].add_field(A_x.fid);
 
 	runtime->execute_index_space(ctx, spmv_launcher);
 	

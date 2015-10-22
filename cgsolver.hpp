@@ -19,8 +19,8 @@ class CGSolver{
 	T L2normr;
 	
 	public:
-	bool Solve(const SpMatrix &A,
-		         const Array<T> &b,
+	bool Solve(SpMatrix &A,
+		         Array<T> &b,
 		         Array<T> &x,
 		         int nitermax,
 		         T threshold,
@@ -32,8 +32,8 @@ class CGSolver{
 };
 
 template<typename T>
-bool CGSolver<T>::Solve(const SpMatrix &A,
-                   const Array<T> &b,
+bool CGSolver<T>::Solve(SpMatrix &A,
+                   Array<T> &b,
                    Array<T> &x,
                    int nitermax,
                    T threshold,
@@ -83,7 +83,7 @@ bool CGSolver<T>::Solve(const SpMatrix &A,
 
 	while(niter < nitermax){
 		
-		//std::cout<<niter<<"            "<<L2normr<<std::endl;
+		std::cout<<niter<<"            "<<L2normr<<std::endl;
 		niter++;
 
 		// Ap = A * p
@@ -129,7 +129,7 @@ bool CGSolver<T>::Solve(const SpMatrix &A,
     }
 #else
 		L2normr = L2norm(r_old, ctx, runtime);
-#if 0
+
 
 		if(L2normr/ L2normr0 < threshold){
                   converged = true;
@@ -138,10 +138,20 @@ bool CGSolver<T>::Solve(const SpMatrix &A,
 		  std::cout<<niter<<"            "<<L2normr<<std::endl;		  
                   break;
                 }
-#endif
+
 #endif
 	}
 	converged = true;
+  
+  cout << "The matrix is : " << endl;
+  A.Print(ctx, runtime);
+
+  cout << "The vector b is : " << endl;
+  b.PrintVals(ctx, runtime);
+
+  cout << "The result x is : " << endl;
+  x.PrintVals(ctx, runtime);
+
 	//T dummy = beta.get_result<T>();
 
 	// destroy the objects

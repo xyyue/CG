@@ -9,6 +9,7 @@
 
 using namespace LegionRuntime::HighLevel;
 using namespace LegionRuntime::Accessor;
+using namespace std;
 
 #ifndef OFFSETS_ARE_DENSE
 #define OFFSETS_ARE_DENSE
@@ -31,6 +32,12 @@ static inline bool offsets_are_dense(const Rect<DIM> &bounds, const ByteOffset *
   return true;
 }
 #endif
+
+struct SparseElem {
+  int x;
+  int y;
+  double z;
+};
 
 enum SPTaskIDs{
 	SP_INIT_TASK_ID = 2,
@@ -124,13 +131,234 @@ class SpMatrix{
 	LogicalRegion elem_lr;
 	LogicalPartition row_lp;
  	LogicalPartition elem_lp;
+  /***************newly added*********************/
+  std::vector<SparseElem> sparse_mat;
+  std::vector<std::vector<double> > mat;
+  /***************newly added*********************/
 
 	SpMatrix(void);
 	SpMatrix(int64_t n, int64_t nparts, int64_t nonzeros, int64_t max_nzeros, Context ctx, HighLevelRuntime *runtime);
 	void DestroySpMatrix(Context ctx, HighLevelRuntime *runtime);
 	void BuildMatrix(double *vals, int *col_ind, int *nzeros_per_row, 
 			         Context ctx, HighLevelRuntime *runtime);
+  void Print(Context ctx, HighLevelRuntime *runtime);
+
+  /***************newly added*********************/
+  void fill_dense_mat(Context ctx, HighLevelRuntime *runtime);
+  void dense_to_sparse(void);
+  void write_out(void);
+  void old_print(void);
+  /***************newly added*********************/
+
 };
+
+void SpMatrix::old_print(void) {
+  std::cout << "Inside old_print():" << std::endl;
+  
+  printf("The dense matrix is:\n");
+  for (unsigned int i = 0; i < mat.size(); i++)
+  {
+    for (unsigned int j = 0; j < mat.size(); j++)
+      printf("%f ", mat[i][j]);
+      printf("\n");
+  }
+  printf("\n\n\nThe sparse matrix is:\n\n");
+
+  for (unsigned int i = 0; i < sparse_mat.size(); i++)
+    printf("%d, %d, %f\n", sparse_mat[i].x, sparse_mat[i].y, sparse_mat[i].z);
+
+}
+
+void SpMatrix::write_out(void) {
+
+  FILE * fp = fopen("GRAPH.txt","w+");
+  int size = (int) mat.size();
+  fprintf(fp, "%d\n", size);
+  std::vector<std::vector<int> > nbr(size, std::vector<int>());
+  int total_neighbor = 0;
+  for (int i = 0; i < (int)sparse_mat.size(); i++)
+  {
+    int x = sparse_mat[i].x;
+    int y = sparse_mat[i].y;
+    if (x != y)
+    {
+      nbr[x].push_back(y);
+      nbr[y].push_back(x);
+      total_neighbor += 2;
+    }
+  }
+  fprintf(fp, "%d\n", total_neighbor);
+
+  for (int i = 0; i < size; i++)
+  {
+    fprintf(fp, "%d ", i);
+    fprintf(fp, "%d ", (int)nbr[i].size());
+    for (int j = 0; j < (int)nbr[i].size(); j++)
+      fprintf(fp, "%d ", nbr[i][j]);
+
+    fprintf(fp, "\n");
+  }
+}
+
+void SpMatrix::dense_to_sparse(void) {
+
+  int size = mat.size();
+  for (int i = 0; i < size; i++)
+    for (int j = i; j < size; j++)
+      if (mat[i][j] > 1e-5)
+      {
+        SparseElem temp;
+        temp.x = i;
+        temp.y = j;
+        temp.z = mat[i][j];
+        sparse_mat.push_back(temp);
+      }
+}
+
+void SpMatrix::fill_dense_mat(Context ctx, HighLevelRuntime *runtime) {
+
+  std::cout << "Inside fill_dense_mat():" << std::endl;
+  std::vector<std::vector<double> > a(nrows, std::vector<double>(nrows, 0));
+  mat = a;
+
+  RegionRequirement req1(row_lr, READ_ONLY, EXCLUSIVE, row_lr);
+  req1.add_field(FID_NZEROS_PER_ROW);
+
+  RegionRequirement req2(elem_lr, READ_ONLY, EXCLUSIVE, elem_lr);
+  req2.add_field(FID_Col_Ind);
+  req2.add_field(FID_Vals);
+
+	InlineLauncher init_launcher1(req1);
+	PhysicalRegion init_region1 = runtime->map_region(ctx, init_launcher1);
+	init_region1.wait_until_valid();
+
+	RegionAccessor<AccessorType::Generic, int64_t> acc_num_nzeros =
+    init_region1.get_field_accessor(FID_NZEROS_PER_ROW).typeify<int64_t>();
+
+	InlineLauncher init_launcher2(req2);
+  PhysicalRegion init_region2 = runtime->map_region(ctx, init_launcher2);
+  init_region2.wait_until_valid();
+
+  RegionAccessor<AccessorType::Generic, int64_t> acc_col =
+    init_region2.get_field_accessor(FID_Col_Ind).typeify<int64_t>();
+
+  RegionAccessor<AccessorType::Generic, double> acc_vals =
+    init_region2.get_field_accessor(FID_Vals).typeify<double>();
+    
+  
+  GenericPointInRectIterator<1> itr_row(row_rect);
+  GenericPointInRectIterator<1> itr_elem(elem_rect);
+
+  cout << "The Matrix is :" << endl;
+
+  for(int i = 0; i < nrows; i++) {
+    int64_t num = acc_num_nzeros.read(DomainPoint::from_point<1>(itr_row.p));
+    int64_t cnt = 0;
+
+    int64_t col = acc_col.read(DomainPoint::from_point<1>(itr_elem.p));
+    double val = acc_vals.read(DomainPoint::from_point<1>(itr_elem.p));
+    //cout << "#############" << "ROW " << i << " ################" << endl;
+
+    for (int j = 0; j < ncols; j++) {
+      if (j == col) {
+        mat[i][j] = val;
+        cout << val << " ";
+        cnt++;
+        if (cnt == num) {
+          for (int k = 0; k < ncols - j - 1; k++)
+            mat[i][j + k + 1] = 0;
+            cout << 0 << " ";
+          for (int k = 0; k < max_nzeros - num + 1; k++)
+            itr_elem++;
+          break;
+        }
+
+        itr_elem++;
+
+        col = acc_col.read(DomainPoint::from_point<1>(itr_elem.p));
+        val = acc_vals.read(DomainPoint::from_point<1>(itr_elem.p));
+      }
+      else
+        mat[i][j] = 0;
+        cout << 0 << " ";
+    }
+
+    itr_row++;
+    cout << endl;
+  }
+}
+
+void SpMatrix::Print(Context ctx, HighLevelRuntime *runtime) {
+  std::cout << "Inside Print():" << std::endl;
+
+  RegionRequirement req1(row_lr, READ_ONLY, EXCLUSIVE, row_lr);
+  req1.add_field(FID_NZEROS_PER_ROW);
+
+  RegionRequirement req2(elem_lr, READ_ONLY, EXCLUSIVE, elem_lr);
+  req2.add_field(FID_Col_Ind);
+  req2.add_field(FID_Vals);
+
+	InlineLauncher init_launcher1(req1);
+	PhysicalRegion init_region1 = runtime->map_region(ctx, init_launcher1);
+	init_region1.wait_until_valid();
+
+	RegionAccessor<AccessorType::Generic, int64_t> acc_num_nzeros =
+    init_region1.get_field_accessor(FID_NZEROS_PER_ROW).typeify<int64_t>();
+
+	InlineLauncher init_launcher2(req2);
+  PhysicalRegion init_region2 = runtime->map_region(ctx, init_launcher2);
+  init_region2.wait_until_valid();
+
+  RegionAccessor<AccessorType::Generic, int64_t> acc_col =
+    init_region2.get_field_accessor(FID_Col_Ind).typeify<int64_t>();
+
+  RegionAccessor<AccessorType::Generic, double> acc_vals =
+    init_region2.get_field_accessor(FID_Vals).typeify<double>();
+    
+  
+  GenericPointInRectIterator<1> itr_row(row_rect);
+  GenericPointInRectIterator<1> itr_elem(elem_rect);
+
+  cout << "The Matrix is :" << endl;
+
+  for(int i = 0; i < nrows; i++) {
+    int64_t num = acc_num_nzeros.read(DomainPoint::from_point<1>(itr_row.p));
+    int64_t cnt = 0;
+
+    int64_t col = acc_col.read(DomainPoint::from_point<1>(itr_elem.p));
+    double val = acc_vals.read(DomainPoint::from_point<1>(itr_elem.p));
+    //cout << "#############" << "ROW " << i << " ################" << endl;
+    //cout << "\n NUM == " << num << endl;
+    //cout << "\n COL == " << col << endl;
+    //cout << "\n VAL == " << val << endl;
+
+    for (int j = 0; j < ncols; j++) {
+      if (j == col) {
+        cout << val << " ";
+        cnt++;
+        if (cnt == num) {
+          for (int k = 0; k < ncols - j - 1; k++)
+            cout << 0 << " ";
+          for (int k = 0; k < max_nzeros - num + 1; k++)
+            itr_elem++;
+          break;
+        }
+
+        itr_elem++;
+
+        col = acc_col.read(DomainPoint::from_point<1>(itr_elem.p));
+        val = acc_vals.read(DomainPoint::from_point<1>(itr_elem.p));
+        //cout << "\n COL == " << col << endl;
+        //cout << "\n VAL == " << val << endl;
+      }
+      else
+        cout << 0 << " ";
+    }
+
+    itr_row++;
+    cout << endl;
+  }
+}
 
 SpMatrix::SpMatrix(int64_t n, int64_t nparts, int64_t nonzeros, int64_t max_nzeros, Context ctx, HighLevelRuntime *runtime){
 
@@ -173,7 +401,7 @@ SpMatrix::SpMatrix(int64_t n, int64_t nparts, int64_t nonzeros, int64_t max_nzer
 	DomainColoring row_coloring;
 	int index = 0;
 	const int local_num_rows = (nrows + nparts - 1) / nparts;
-	for(int color = 0; color < nparts-1; color++){
+	for(int color = 0; color < nparts - 1; color++){
 		assert((index + local_num_rows) <= nrows);
 		Rect<1> subrect(Point<1>(index), Point<1>(index + local_num_rows - 1));
 		row_coloring[color] = Domain::from_rect<1>(subrect);
@@ -246,7 +474,7 @@ void SpMatrix::BuildMatrix(double *vals, int *col_ind, int *nzeros_per_row,
   ByteOffset offsets[1];
 
 	// number of nonzeros in each row
-  int64_t *num_nzeros_ptr = acc_num_nzeros.raw_rect_ptr<1>(row_rect, subrect, offsets);
+  int64_t *num_nzeros_ptr = acc_num_nzeros.raw_rect_ptr<1>(row_rect, subrect, offsets);  // What is this for?
   if (!num_nzeros_ptr || (subrect != row_rect) ||
       !offsets_are_dense<1,int64_t>(row_rect, offsets))
   {

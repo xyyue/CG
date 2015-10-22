@@ -141,39 +141,41 @@ void Array<T>::Initialize(Context ctx, HighLevelRuntime *runtime) {
 template<typename T>
 void Array<T>::Initialize(T *input, Context ctx, HighLevelRuntime *runtime) {
 
-		RegionRequirement req(lr, WRITE_DISCARD, EXCLUSIVE, lr);
-    req.add_field(FID_X);
+	RegionRequirement req(lr, WRITE_DISCARD, EXCLUSIVE, lr);
+  req.add_field(FID_X);
 
-    InlineLauncher init_launcher(req);
-    PhysicalRegion init_region = runtime->map_region(ctx, init_launcher);
-    init_region.wait_until_valid();
+  InlineLauncher init_launcher(req);
+  PhysicalRegion init_region = runtime->map_region(ctx, init_launcher);
+  init_region.wait_until_valid();
 
-    RegionAccessor<AccessorType::Generic, T> acc_x =
-    init_region.get_field_accessor(FID_X).typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_x =
+  init_region.get_field_accessor(FID_X).typeify<T>();
 
-    // insert input values into the logical region
-    Rect<1> subrect;
-    ByteOffset offsets[1];
-    T *x_ptr = acc_x.template raw_rect_ptr<1>(rect, subrect, offsets);
-    if (!x_ptr || (subrect != rect) ||
-        !offsets_are_dense<1,T>(rect, offsets))
-    {
-            GenericPointInRectIterator<1> itr(rect);
+  // insert input values into the logical region
+  Rect<1> subrect;
+  ByteOffset offsets[1];
+  T *x_ptr = acc_x.template raw_rect_ptr<1>(rect, subrect, offsets);
+  if (!x_ptr || (subrect != rect) ||
+      !offsets_are_dense<1,T>(rect, offsets))
+  {
+    GenericPointInRectIterator<1> itr(rect);
 
-            for(int i=0; i<size; i++) {
-                    acc_x.write(DomainPoint::from_point<1>(itr.p), input[i]);
-                    itr++;
-            }
+    for(int i=0; i<size; i++) {
+      acc_x.write(DomainPoint::from_point<1>(itr.p), input[i]);
+      itr++;
     }
-    else
-    {
-      for (int i = 0; i < size;i++) {
-        x_ptr[i] = input[i];
-      }
+  }
+  else
+  {
+    std::cout << "The values in the vector is : " << std::endl;
+    for (int i = 0; i < size;i++) {
+      x_ptr[i] = input[i];
+      std::cout << i << input[i] << std::endl;
     }
+  }
 
-    runtime->unmap_region(ctx, init_region);
-    return;
+  runtime->unmap_region(ctx, init_region);
+  return;
 }
 
 template<typename T>
@@ -272,32 +274,32 @@ template<typename T>
 void Array<T>::PrintVals(Context ctx, HighLevelRuntime *runtime) {
 
 	RegionRequirement req(lr, READ_ONLY, EXCLUSIVE, lr);
-        req.add_field(FID_X);
+  req.add_field(FID_X);
 
-        InlineLauncher init_launcher(req);
-        PhysicalRegion init_region = runtime->map_region(ctx, init_launcher);
-        init_region.wait_until_valid();
+  InlineLauncher init_launcher(req);
+  PhysicalRegion init_region = runtime->map_region(ctx, init_launcher);
+  init_region.wait_until_valid();
 
-        RegionAccessor<AccessorType::Generic, T> acc_x =
-        init_region.get_field_accessor(FID_X).typeify<T>();
+  RegionAccessor<AccessorType::Generic, T> acc_x =
+  init_region.get_field_accessor(FID_X).typeify<T>();
 
-	T norm = 0.0;
-        // insert input values into the logical region
-        {
-                GenericPointInRectIterator<1> itr(rect);
+	//T norm = 0.0;
+  // insert input values into the logical region
+  {
+    GenericPointInRectIterator<1> itr(rect);
 
-                for(int i=0; i<size; i++) {
-                        T val = acc_x.read(DomainPoint::from_point<1>(itr.p));
-			std::cout<<i<<"  "<<val<<std::endl;
+    for(int i=0; i<size; i++) {
+      T val = acc_x.read(DomainPoint::from_point<1>(itr.p));
+		  std::cout<<i<<"  "<<std::setprecision(10) << val<<std::endl;
 
-			//norm += (exact[i]-val) * (exact[i]-val);
-                        itr++;
-                }
-		//norm = sqrt(norm/size);
-		//std::cout<<"L2Norm = "<<norm<<std::endl;
-        }
+		  //norm += (exact[i]-val) * (exact[i]-val);
+      itr++;
+    }
+	//norm = sqrt(norm/size);
+	//std::cout<<"L2Norm = "<<norm<<std::endl;
+  }
 
-        runtime->unmap_region(ctx, init_region);
+  runtime->unmap_region(ctx, init_region);
 
 	return;
 }

@@ -13,11 +13,12 @@
 #include "cgsolver.hpp"
 #include "cgmapper.hpp"
 #include <time.h>
+#include "circuit.h"
 using namespace LegionRuntime::HighLevel;
 
-enum TaskIDs {
-   TOP_LEVEL_TASK_ID = 0,
-};
+//enum TaskIDs {
+//   TOP_LEVEL_TASK_ID = 0,
+//};
 
 void top_level_task(const Task *task,
                const std::vector<PhysicalRegion> &regions,
@@ -101,11 +102,24 @@ void top_level_task(const Task *task,
 	std::cout<<"Make sparse matrix..."<<std::endl;
 	SpMatrix A(params.nrows, nparts, params.nonzeros, params.max_nzeros, ctx, runtime);
 	A.BuildMatrix(params.vals, params.col_ind, params.nzeros_per_row, ctx, runtime);
+  A.fill_dense_mat(ctx, runtime);
+  A.dense_to_sparse();
+  A.Print(ctx, runtime);
+  //A.old_print();
+  A.write_out();
+
+  std::cout << "Executing the system call!!" << endl;
+  int r = system("mpirun -n 3 simpleGRAPH");
+  if (r == 0);
+  std::cout << "Executing ECHO!!" << endl;
+  r = system("echo AAA");
+  if (r == 0);
 
 	// build unknown vector   
 	std::cout<<"Make  unknown vector x..."<<std::endl;	
 	Array<double> x(params.nrows, nparts, ctx, runtime);
 	x.Initialize(ctx, runtime);
+  //x.PrintVals(ctx, runtime);
 
 	// build rhs vector
 	std::cout<<"Make rhs vector..."<<std::endl;
@@ -117,11 +131,14 @@ void top_level_task(const Task *task,
 		x_rand.RandomInit(ctx, runtime);
 		Predicate loop_pred = Predicate::TRUE_PRED;
 		spmv(A, x_rand, b, loop_pred, ctx, runtime);
+    std::cout << "INSIDE IFFF!!!" << std::endl;
 	}
 	else {
+    std::cout << "INSIDE ELSE!!!" << std::endl;
 	    // otherwise use the rhs array in params
 		b.Initialize(params.rhs, ctx, runtime);	
 	}
+  //b.PrintVals(ctx, runtime);
 		
 	std::cout<<"Launch the CG solver..."<<std::endl;	
 	std::cout<<std::endl;
@@ -132,7 +149,7 @@ void top_level_task(const Task *task,
  	clock_gettime(CLOCK_MONOTONIC, &t_start);
 
 	CGSolver<double> cgsolver;
-	bool result = cgsolver.Solve(A, b, x, iter_max, 1e-4, ctx, runtime);
+	bool result = cgsolver.Solve(A, b, x, iter_max, 1e-6, ctx, runtime);
 
 	clock_gettime(CLOCK_MONOTONIC, &t_end);
 
@@ -152,6 +169,11 @@ void top_level_task(const Task *task,
 	//x.PrintVals(ctx, runtime);
 	//x.GiveNorm(params.exact, ctx, runtime);
 
+  std::cout<<"Exact solution:"<<std::endl;
+  for(int i=0 ; i<params.nrows ; i++){
+    std::cout<<params.exact[i]<<std::endl;
+  }
+
 	// destroy the objects
 	x.DestroyArray(ctx, runtime);
 	b.DestroyArray(ctx, runtime);
@@ -168,8 +190,8 @@ int main(int argc, char **argv){
        	Processor::LOC_PROC, true/*single*/, false/*index*/,
         AUTO_GENERATE_ID, TaskConfigOptions(), "top_level_task");
        	
-        // Register the callback function for creating custom mapper
-  	HighLevelRuntime::set_registration_callback(mapper_registration);
+  // Register the callback function for creating custom mapper
+  HighLevelRuntime::set_registration_callback(mapper_registration);
 	
 	RegisterVectorTask<double>();
 
