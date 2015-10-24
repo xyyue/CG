@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstdlib>
 #include "legion.h"
+#include "circuit.h"
 
 using namespace LegionRuntime::HighLevel;
 using namespace LegionRuntime::Accessor;
@@ -134,6 +135,12 @@ class SpMatrix{
   /***************newly added*********************/
   std::vector<SparseElem> sparse_mat;
   std::vector<std::vector<double> > mat;
+  Circuit ckt;
+  std::vector<CircuitPiece> pieces;
+  int num_pieces;
+  Partitions partitions;
+
+
   /***************newly added*********************/
 
 	SpMatrix(void);
@@ -148,9 +155,11 @@ class SpMatrix{
   void dense_to_sparse(void);
   void write_out(void);
   void old_print(void);
+  void set_up_mat(Context ctx, HighLevelRuntime *runtime);
   /***************newly added*********************/
 
 };
+
 
 void SpMatrix::old_print(void) {
   std::cout << "Inside old_print():" << std::endl;
@@ -198,6 +207,7 @@ void SpMatrix::write_out(void) {
 
     fprintf(fp, "\n");
   }
+  fclose(fp);
 }
 
 void SpMatrix::dense_to_sparse(void) {
@@ -604,4 +614,444 @@ void BuildMatrix_Task(const Task *task,
 
 	return;
 }
+
+static int get_next_line(FILE *fp, char *buf, int bufsize)
+{
+int i, cval, len;
+char *c;
+
+  while (1)
+  {
+    c = fgets(buf, bufsize, fp);
+
+    if (c == NULL)
+      return 0;  /* end of file */
+
+    len = strlen(c);
+
+    for (i=0, c=buf; i < len; i++, c++)
+    {
+      cval = (int)*c;
+      if (isspace(cval) == 0) break;
+    }
+    if (i == len) continue;   /* blank line */
+    if (*c == '#') continue;  /* comment */ 
+    if (c != buf)
+    {
+      strcpy(buf, c);
+    }
+    break;
+  }
+  return strlen(buf); /* number * of * characters * */
+}
+
+
+static int get_next_int(FILE* fp)
+{
+  int value;
+  char buf[512];
+  int bufsize = 512;
+
+  int num = get_next_line(fp, buf, bufsize);
+  if (num == 0)
+    return -1;
+  sscanf(buf, "%d", &value);
+  return value;
+}
+
+ptr_t get_ith_ptr(HighLevelRuntime *runtime, Context ctx, IndexSpace index_space, int i)
+{
+  IndexIterator itr(runtime, ctx, index_space);
+  i++;
+  ptr_t node_ptr;
+  for (int j = 0; j < i; j++)
+  {
+    assert(itr.has_next());
+    node_ptr = itr.next();
+  }
+  return node_ptr;
+}
+
+int get_piece_num(std::vector<std::vector<int> > &partition, int num)
+{
+  for (int i = 0; i < (int)partition.size(); i++)
+    for (int j = 0; j < (int) partition.size(); j++)
+      if (num == partition[i][j])
+        return i;
+  return -1;
+}
+
+PointerLocation find_location(ptr_t ptr, const std::set<ptr_t> &private_nodes,
+                              const std::set<ptr_t> &shared_nodes, const std::set<ptr_t> &ghost_nodes)
+{
+  if (private_nodes.find(ptr) != private_nodes.end())
+  {
+    return PRIVATE_PTR;
+  }
+  else if (shared_nodes.find(ptr) != shared_nodes.end())
+  {
+    return SHARED_PTR;
+  }
+  else if (ghost_nodes.find(ptr) != ghost_nodes.end())
+  {
+    return GHOST_PTR;
+  }
+  // Should never make it here, if we do something bad happened
+  assert(false);
+  return PRIVATE_PTR;
+}
+
+
+
+void SpMatrix::set_up_mat(Context ctx, HighLevelRuntime *runtime) 
+
+//Partitions load_circuit(Circuit &ckt, std::vector<CircuitPiece> &pieces, Context ctx,
+//                        HighLevelRuntime *runtime, int &num_pieces, int nodes_per_piece,
+//                        int random_seed, std::vector<SparseElem>&sparse_mat, 
+//                        std::vector<double> &vec, std::vector<double> &b)
+{
+  printf("Initializing matrix multiplication...");
+  // inline map physical instances for the nodes and wire regions
+  RegionRequirement wires_req(ckt.all_wires, READ_WRITE, EXCLUSIVE, ckt.all_wires);
+  wires_req.add_field(FID_IN_PTR);
+  wires_req.add_field(FID_OUT_PTR);
+  wires_req.add_field(FID_IN_LOC);
+  wires_req.add_field(FID_OUT_LOC);
+  wires_req.add_field(FID_WIRE_VALUE);
+  wires_req.add_field(FID_PIECE_NUM1);
+  wires_req.add_field(FID_PIECE_NUM2);
+
+  RegionRequirement nodes_req(ckt.all_nodes, READ_WRITE, EXCLUSIVE, ckt.all_nodes);
+  nodes_req.add_field(FID_NODE_VALUE);
+  nodes_req.add_field(FID_NODE_RESULT);
+  nodes_req.add_field(FID_NODE_OFFSET);
+
+  RegionRequirement locator_req(ckt.node_locator, READ_WRITE, EXCLUSIVE, ckt.node_locator);
+  locator_req.add_field(FID_LOCATOR);
+
+  PhysicalRegion wires = runtime->map_region(ctx, wires_req);
+  PhysicalRegion nodes = runtime->map_region(ctx, nodes_req);
+  PhysicalRegion locator = runtime->map_region(ctx, locator_req);
+
+
+  Coloring wire_owner_map;
+  Coloring private_node_map;
+  Coloring shared_node_map;
+  Coloring ghost_node_map;
+  Coloring locator_node_map;
+
+  Coloring privacy_map;
+  Coloring inside_node_map;
+  privacy_map[0];
+  privacy_map[1];
+
+  FILE *fp = fopen("partition.txt", "r");
+  num_pieces = get_next_int(fp);
+  pieces.resize(num_pieces);
+  // keep a O(1) indexable list of nodes in each piece for connecting wires
+  std::vector<std::vector<ptr_t> > piece_node_ptrs(num_pieces); // Node ptrs for each piece
+  std::vector<int> piece_shared_nodes(num_pieces, 0); // num of shared nodes in each piece
+
+  int random_seed = 12345;
+  srand48(random_seed);
+
+  nodes.wait_until_valid();
+  //RegionAccessor<AccessorType::Generic, double> fa_node_value = 
+  //  nodes.get_field_accessor(FID_NODE_VALUE).typeify<double>();
+  RegionAccessor<AccessorType::Generic, double> fa_node_result = 
+    nodes.get_field_accessor(FID_NODE_RESULT).typeify<double>();
+  //RegionAccessor<AccessorType::Generic, double> fa_node_offset = 
+  //  nodes.get_field_accessor(FID_NODE_OFFSET).typeify<double>();
+
+  locator.wait_until_valid();
+  RegionAccessor<AccessorType::Generic, PointerLocation> locator_acc = 
+    locator.get_field_accessor(FID_LOCATOR).typeify<PointerLocation>();
+
+  int num_nodes = nrows;
+
+  ptr_t *first_nodes = new ptr_t[num_pieces];
+  {
+    IndexAllocator node_allocator = runtime->create_index_allocator(ctx, ckt.all_nodes.get_index_space());
+    node_allocator.alloc(num_nodes);
+  }
+  // Write the values of the nodes.
+  std::vector<std::vector<int> > partition(num_pieces, std::vector<int>());
+  std::vector<std::vector<ptr_t> > pvt_ptrs(num_pieces);
+  for (int i = 0; i < num_pieces; i++)
+  {
+    int num = get_next_int(fp);
+    for (int j = 0; j < num; j++)
+    {
+      partition[i].push_back(get_next_int(fp));
+    }
+  }
+
+  //for (int i = 0; i < num_pieces; i++)
+  //{
+  //  printf("\nthe %d piece:\n", i);
+  //  for (int j = 0; j < (int)partition[i].size(); j++)
+  //    printf("%d ", partition[i][j]);
+
+  //}
+
+  //TODO:: the first_nodes are useless now!!!!
+  printf("BBBBB\n");
+  {
+    printf("num_pieces is %d !!!\n", num_pieces);
+    for (int i = 0; i < num_pieces; i++)
+    {
+      for (int j = 0; j < (int)partition[i].size(); j++)
+      {
+        int idx = partition[i][j];
+        printf("idx is %d\n", idx);
+        ptr_t node_ptr = get_ith_ptr(runtime, ctx, ckt.all_nodes.get_index_space(), idx);
+        pvt_ptrs[i].push_back(node_ptr);
+
+        //fa_node_value.write(node_ptr, vec[idx]);
+        fa_node_result.write(node_ptr, 0.0);
+        //fa_node_offset.write(node_ptr, b[idx]);
+
+        // Just put everything in everyones private map at the moment       
+        // We'll pull pointers out of here later as nodes get tied to 
+        // wires that are non-local
+        private_node_map[i].points.insert(node_ptr); // The private nodes in a piece
+        privacy_map[0].points.insert(node_ptr);      // All the private nodes
+        locator_node_map[i].points.insert(node_ptr);
+        printf("i = %d\n", i);
+        printf("the size is %d\n", (int)piece_node_ptrs[i].size());
+	      //piece_node_ptrs[i].push_back(node_ptr);
+        inside_node_map[i].points.insert(node_ptr);  // The private and shared nodes in a piece
+      }
+    }
+  }
+  // verify the previous implementation
+  // Print the node values for each piece 
+  //IndexIterator itr(runtime, ctx, ckt.all_nodes.get_index_space());
+  //  for (int n = 0; n < num_pieces; n++)
+  //  {
+  //    printf("node values for the %d th piece:\n", n);
+  //    for (int i = 0; i < nodes_per_piece; i++)
+  //    {
+  //      int current = n * nodes_per_piece + i;
+  //      if (current >= num_nodes)
+  //        break;
+  //      assert(itr.has_next());
+  //      ptr_t node_ptr = itr.next();
+  //      printf("%f ", fa_node_value.read(node_ptr));
+  //    }
+  //    printf("There are %d nodes in this piece\n", (int)piece_node_ptrs[n].size());
+  //    printf("\n");
+  //  }
+  //printf("\n");
+
+  wires.wait_until_valid();
+  RegionAccessor<AccessorType::Generic, ptr_t> fa_wire_in_ptr = 
+    wires.get_field_accessor(FID_IN_PTR).typeify<ptr_t>();
+  RegionAccessor<AccessorType::Generic, ptr_t> fa_wire_out_ptr = 
+    wires.get_field_accessor(FID_OUT_PTR).typeify<ptr_t>();
+  RegionAccessor<AccessorType::Generic, PointerLocation> fa_wire_in_loc = 
+    wires.get_field_accessor(FID_IN_LOC).typeify<PointerLocation>();
+  RegionAccessor<AccessorType::Generic, PointerLocation> fa_wire_out_loc = 
+    wires.get_field_accessor(FID_OUT_LOC).typeify<PointerLocation>();
+
+  RegionAccessor<AccessorType::Generic, double> fa_wire_value = 
+    wires.get_field_accessor(FID_WIRE_VALUE).typeify<double>();
+  RegionAccessor<AccessorType::Generic, int> fa_piece_num1 = 
+    wires.get_field_accessor(FID_PIECE_NUM1).typeify<int>();
+  RegionAccessor<AccessorType::Generic, int> fa_piece_num2 = 
+    wires.get_field_accessor(FID_PIECE_NUM2).typeify<int>();
+
+  ptr_t *first_wires = new ptr_t[num_pieces];
+  // Allocate all the wires
+  int num_wires = (int)sparse_mat.size(); 
+  {
+    IndexAllocator wire_allocator = runtime->create_index_allocator(ctx, ckt.all_wires.get_index_space());
+    wire_allocator.alloc(num_wires);
+  }
+
+  {
+    IndexIterator itr(runtime, ctx, ckt.all_wires.get_index_space());
+    for (int i = 0; i < num_wires; i++)
+    {
+      assert(itr.has_next());
+      ptr_t wire_ptr = itr.next();
+      // Record the first wire pointer for this piece
+
+
+      /******************newly added****************/
+
+      //int m1 = sparse_mat[i].x / nodes_per_piece;
+      //int n1 = sparse_mat[i].x % nodes_per_piece;
+      //ptr_t p1 = piece_node_ptrs[m1][n1];
+      ptr_t p1 = get_ith_ptr(runtime, ctx, ckt.all_nodes.get_index_space(), sparse_mat[i].x);
+      fa_wire_in_ptr.write(wire_ptr, p1);
+
+
+      //int m2 = sparse_mat[i].y / nodes_per_piece;
+      //int n2 = sparse_mat[i].y % nodes_per_piece;
+      //ptr_t p2 = piece_node_ptrs[m2][n2];
+      ptr_t p2 = get_ith_ptr(runtime, ctx, ckt.all_nodes.get_index_space(), sparse_mat[i].y);
+      fa_wire_out_ptr.write(wire_ptr, p2);
+
+      fa_wire_value.write(wire_ptr, sparse_mat[i].z); 
+
+      int m1 = get_piece_num(partition, sparse_mat[i].x);
+      int m2 = get_piece_num(partition, sparse_mat[i].y);
+      
+      fa_piece_num1.write(wire_ptr, m1); // corresponding to in_ptr
+      fa_piece_num2.write(wire_ptr, m2); // corresponding to out_ptr
+      // These nodes are no longer private
+      if (m1 != m2) // If the two nodes are in different pieces
+      {
+        privacy_map[0].points.erase(p1);
+        privacy_map[0].points.erase(p2);
+        privacy_map[1].points.insert(p1);
+        privacy_map[1].points.insert(p2);
+        ghost_node_map[m1].points.insert(p2);
+        ghost_node_map[m2].points.insert(p1);
+        wire_owner_map[m1].points.insert(wire_ptr);
+        wire_owner_map[m2].points.insert(wire_ptr);
+      }
+      else
+        wire_owner_map[m1].points.insert(wire_ptr);
+
+      /************newly added**********************/
+
+    }
+  }
+
+  // Second pass: make some random fraction of the private nodes shared
+  {
+    IndexIterator itr(runtime, ctx, ckt.all_nodes.get_index_space()); 
+    for (int i = 0; i < num_pieces; i++)
+    {
+      for (int j = 0; j < (int)partition[i].size(); j++)
+      {
+        int idx = partition[i][j];
+        ptr_t node_ptr = get_ith_ptr(runtime, ctx, ckt.all_nodes.get_index_space(), idx);
+
+        if (privacy_map[0].points.find(node_ptr) == privacy_map[0].points.end()) // if shared
+        {
+          private_node_map[i].points.erase(node_ptr);
+          // node is now shared
+          shared_node_map[i].points.insert(node_ptr);
+          locator_acc.write(node_ptr,SHARED_PTR); // node is shared 
+        }
+        else
+        {
+          locator_acc.write(node_ptr,PRIVATE_PTR); // node is private 
+        }
+      }
+    }
+  }
+  // Second pass (part 2): go through the wires and update the locations // ////////////////////////////// This part is useless
+  {
+    IndexIterator itr(runtime, ctx, ckt.all_wires.get_index_space());
+    for (int i = 0; i < num_wires; i++)
+    {
+      assert(itr.has_next());
+      ptr_t wire_ptr = itr.next();
+      ptr_t in_ptr = fa_wire_in_ptr.read(wire_ptr);
+      ptr_t out_ptr = fa_wire_out_ptr.read(wire_ptr);
+
+      // Find out which piece does the wire belong to.
+      int piece_num = 0;
+      for (int m = 0; m < (int)wire_owner_map.size(); m++)
+        if (wire_owner_map[m].points.find(wire_ptr) != wire_owner_map[m].points.end())
+        {
+          piece_num = m;
+          break;
+        }
+     // printf("piece_num = %d\n\n", piece_num);      
+      fa_wire_in_loc.write(wire_ptr, 
+          find_location(in_ptr, private_node_map[piece_num].points, 
+            shared_node_map[piece_num].points, ghost_node_map[piece_num].points));     
+      fa_wire_out_loc.write(wire_ptr, 
+          find_location(out_ptr, private_node_map[piece_num].points, 
+            shared_node_map[piece_num].points, ghost_node_map[piece_num].points));
+    }
+  }
+
+  runtime->unmap_region(ctx, wires);
+  runtime->unmap_region(ctx, nodes);
+  runtime->unmap_region(ctx, locator);
+
+  // Now we can create our partitions and update the circuit pieces
+
+  // first create the privacy partition that splits all the nodes into either shared or private
+  IndexPartition privacy_part = runtime->create_index_partition(ctx, ckt.all_nodes.get_index_space(), privacy_map, true/*disjoint*/);
+  runtime->attach_name(privacy_part, "is_private");
+
+  
+  IndexSpace all_private = runtime->get_index_subspace(ctx, privacy_part, 0);
+  runtime->attach_name(all_private, "private");
+  IndexSpace all_shared  = runtime->get_index_subspace(ctx, privacy_part, 1);
+  runtime->attach_name(all_shared, "shared");
+
+  // Now create partitions for each of the subregions
+  Partitions result;
+
+  IndexPartition inside_part = runtime->create_index_partition(ctx, ckt.all_nodes.get_index_space(), inside_node_map, true/*disjoint*/);
+  runtime->attach_name(inside_part, "inside_part");
+  result.inside_nodes = runtime->get_logical_partition_by_tree(ctx, inside_part, ckt.all_nodes.get_field_space(), ckt.all_nodes.get_tree_id());
+  runtime->attach_name(result.inside_nodes, "inside_nodes");
+
+  IndexPartition priv = runtime->create_index_partition(ctx, all_private, private_node_map, true/*disjoint*/);
+  runtime->attach_name(priv, "private");
+  result.pvt_nodes = runtime->get_logical_partition_by_tree(ctx, priv, ckt.all_nodes.get_field_space(), ckt.all_nodes.get_tree_id());
+  runtime->attach_name(result.pvt_nodes, "private_nodes");
+  IndexPartition shared = runtime->create_index_partition(ctx, all_shared, shared_node_map, true/*disjoint*/);
+  runtime->attach_name(shared, "shared");
+  result.shr_nodes = runtime->get_logical_partition_by_tree(ctx, shared, ckt.all_nodes.get_field_space(), ckt.all_nodes.get_tree_id());
+  runtime->attach_name(result.shr_nodes, "shared_nodes");
+  IndexPartition ghost = runtime->create_index_partition(ctx, all_shared, ghost_node_map, false/*disjoint*/);
+  runtime->attach_name(ghost, "ghost");
+  result.ghost_nodes = runtime->get_logical_partition_by_tree(ctx, ghost, ckt.all_nodes.get_field_space(), ckt.all_nodes.get_tree_id());
+  runtime->attach_name(result.ghost_nodes, "ghost_nodes");
+
+  IndexPartition pvt_wires = runtime->create_index_partition(ctx, ckt.all_wires.get_index_space(), wire_owner_map, false/*disjoint*/);
+  runtime->attach_name(pvt_wires, "private");
+  result.pvt_wires = runtime->get_logical_partition_by_tree(ctx, pvt_wires, ckt.all_wires.get_field_space(), ckt.all_wires.get_tree_id()); 
+  runtime->attach_name(result.pvt_wires, "private_wires");
+
+  IndexPartition locs = runtime->create_index_partition(ctx, ckt.node_locator.get_index_space(), locator_node_map, true/*disjoint*/);
+  runtime->attach_name(locs, "locs");
+  result.node_locations = runtime->get_logical_partition_by_tree(ctx, locs, ckt.node_locator.get_field_space(), ckt.node_locator.get_tree_id());
+  runtime->attach_name(result.node_locations, "node_locations");
+
+  char buf[100];
+  // Build the pieces
+  for (int n = 0; n < num_pieces; n++)
+  {
+    pieces[n].pvt_nodes = runtime->get_logical_subregion_by_color(ctx, result.pvt_nodes, n);
+    sprintf(buf, "private_nodes_of_piece_%d", n);
+    runtime->attach_name(pieces[n].pvt_nodes, buf);
+    pieces[n].shr_nodes = runtime->get_logical_subregion_by_color(ctx, result.shr_nodes, n);
+    sprintf(buf, "shared_nodes_of_piece_%d", n);
+    runtime->attach_name(pieces[n].shr_nodes, buf);
+    pieces[n].ghost_nodes = runtime->get_logical_subregion_by_color(ctx, result.ghost_nodes, n);
+    sprintf(buf, "ghost_nodes_of_piece_%d", n);
+    runtime->attach_name(pieces[n].ghost_nodes, buf);
+    pieces[n].pvt_wires = runtime->get_logical_subregion_by_color(ctx, result.pvt_wires, n);
+    sprintf(buf, "private_wires_of_piece_%d", n);
+    runtime->attach_name(pieces[n].pvt_wires, buf);
+
+    pieces[n].num_wires = wire_owner_map[n].points.size();
+    pieces[n].first_wire = first_wires[n];
+    pieces[n].num_nodes = (int)pvt_ptrs[n].size();//piece_node_ptrs[n].size();
+    pieces[n].first_node = first_nodes[n];
+    pieces[n].node_ptrs = pvt_ptrs[n];
+
+    pieces[n].dt = DELTAT;
+    pieces[n].piece_num = n;
+  }
+
+  delete [] first_wires;
+  delete [] first_nodes;
+
+  printf("Finished initializing simulation...");
+
+  partitions = result;
+}
+
 #endif /*sparsematrix_hpp*/

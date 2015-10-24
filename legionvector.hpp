@@ -38,7 +38,7 @@ enum VTaskIDs{
 };
 
 enum VFieldIDs{
-        FID_X = 0,
+  FID_X = 0,
 };
 
 template<typename T>
@@ -81,13 +81,14 @@ Array<T>::Array(int64_t size, int64_t nparts, Context ctx, HighLevelRuntime *run
 	this-> nparts = nparts;
 
 	rect = Rect<1>(Point<1>(0), Point<1>(size-1));
-	is = runtime->create_index_space(ctx,
-					 Domain::from_rect<1>(rect));
+	is = runtime->create_index_space(ctx, Domain::from_rect<1>(rect));
 	fs = runtime->create_field_space(ctx);
+
 	{
 		FieldAllocator allocator = runtime->create_field_allocator(ctx, fs);
 		allocator.allocate_field(sizeof(int64_t), FID_X);
 	}
+
 	lr = runtime->create_logical_region(ctx, is, fs);
 
 	// partition the logical region
