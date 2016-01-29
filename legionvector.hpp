@@ -82,6 +82,11 @@ Array<T>::Array(int64_t size, int64_t nparts, Context ctx, HighLevelRuntime *run
 
 	rect = Rect<1>(Point<1>(0), Point<1>(size-1));
 	is = runtime->create_index_space(ctx, Domain::from_rect<1>(rect));
+
+  //printf("Inside ARRAY::ARRAY!!\n");
+  //IndexIterator itr_read(runtime, ctx, is);
+
+
 	fs = runtime->create_field_space(ctx);
 
 	{
@@ -168,10 +173,10 @@ void Array<T>::Initialize(T *input, Context ctx, HighLevelRuntime *runtime) {
   }
   else
   {
-    std::cout << "The values in the vector is : " << std::endl;
+    std::cout << "The values in the vector is :(Inside the Array.Initialize() ) " << std::endl;
     for (int i = 0; i < size;i++) {
       x_ptr[i] = input[i];
-      std::cout << i << input[i] << std::endl;
+      std::cout << i << "  "<< input[i] << std::endl;
     }
   }
 
@@ -256,7 +261,7 @@ void Initialize_Task(const Task *task,
 		GenericPointInRectIterator<1> itr(rect);
 
     for(int i=0; i < rect.volume(); i++) {
-      acc_x.write(DomainPoint::from_point<1>(itr.p), 0.0);
+      acc_x.write(DomainPoint::from_point<1>(itr.p), 0.0);   // Should be 0
       itr++;
     }
   }

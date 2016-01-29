@@ -156,11 +156,161 @@ class SpMatrix{
   void write_out(void);
   void old_print(void);
   void set_up_mat(Context ctx, HighLevelRuntime *runtime);
+  template <typename T>
+  void spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *runtime);
+  void print_nodes(Context ctx, HighLevelRuntime *runtime);
   /***************newly added*********************/
 
 };
 
 
+void SpMatrix::print_nodes(Context ctx, HighLevelRuntime *runtime) {
+  
+  RegionRequirement nodes_req(ckt.all_nodes, READ_WRITE, EXCLUSIVE, ckt.all_nodes);
+  nodes_req.add_field(FID_NODE_VALUE);
+  nodes_req.add_field(FID_NODE_RESULT);
+
+  InlineLauncher nodes_launcher(nodes_req);
+  PhysicalRegion nodes = runtime->map_region(ctx, nodes_req);
+
+  nodes.wait_until_valid();
+  RegionAccessor<AccessorType::Generic, double> fa_node_value = 
+    nodes.get_field_accessor(FID_NODE_VALUE).typeify<double>();
+
+  IndexIterator itr(runtime, ctx, ckt.all_nodes.get_index_space());
+  for (int n = 0; n < nrows; n++)
+  {
+    assert(itr.has_next());
+    ptr_t node_ptr = itr.next();
+    double val = fa_node_value.read(node_ptr);
+    printf("%d: %f\n", n, val);
+  }
+  printf("\n");
+
+  runtime->unmap_region(ctx, nodes);
+ 
+}
+
+template <typename T>
+void SpMatrix::spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *runtime) {
+  printf("Starting Sparse Matrix SPMV...\n");
+  // inline map physical instances for the nodes and wire regions
+  RegionRequirement nodes_req(ckt.all_nodes, READ_WRITE, EXCLUSIVE, ckt.all_nodes);
+  nodes_req.add_field(FID_NODE_VALUE);
+  nodes_req.add_field(FID_NODE_RESULT);
+  //nodes_req.add_field(FID_NODE_OFFSET);
+
+  RegionRequirement locator_req(ckt.node_locator, READ_WRITE, EXCLUSIVE, ckt.node_locator);
+  locator_req.add_field(FID_LOCATOR);
+
+  InlineLauncher nodes_launcher(nodes_req);
+  PhysicalRegion nodes = runtime->map_region(ctx, nodes_req);
+  InlineLauncher locator_launcher(locator_req);
+  PhysicalRegion locator = runtime->map_region(ctx, locator_req);
+
+
+  nodes.wait_until_valid();
+  RegionAccessor<AccessorType::Generic, double> fa_node_value = 
+    nodes.get_field_accessor(FID_NODE_VALUE).typeify<double>();
+  //TODO
+  //RegionAccessor<AccessorType::Generic, double> fa_node_result = 
+  //  nodes.get_field_accessor(FID_NODE_RESULT).typeify<double>();
+  //RegionAccessor<AccessorType::Generic, double> fa_node_offset = 
+  //  nodes.get_field_accessor(FID_NODE_OFFSET).typeify<double>();
+
+
+	RegionRequirement req(x.lr, READ_ONLY, EXCLUSIVE, x.lr);
+  req.add_field(FID_X); //x.fid
+
+  InlineLauncher init_launcher(req);
+  PhysicalRegion init_region = runtime->map_region(ctx, init_launcher);
+  init_region.wait_until_valid();
+
+  RegionAccessor<AccessorType::Generic, T> acc_x =
+    init_region.get_field_accessor(FID_X).typeify<T>();
+
+  // For unstructured index space
+  IndexIterator itr(runtime, ctx, ckt.all_nodes.get_index_space());
+
+  Rect<1> rect(Point<1>(0), Point<1> (nrows - 1));
+  GenericPointInRectIterator<1> pir(rect);
+
+  std::cout << "The values are:" << std::endl;
+  for (int n = 0; n < nrows; n++)
+  {
+    assert(itr.has_next());
+    ptr_t node_ptr = itr.next();
+
+    double val = acc_x.read(DomainPoint::from_point<1>(pir.p));
+    //printf("%d: The val is: %f \n", n, val);
+
+    fa_node_value.write(node_ptr, val);
+  }
+  std::cout << "The process is over!" << std::endl;
+
+
+  runtime->unmap_region(ctx, init_region);
+  runtime->unmap_region(ctx, nodes);
+  runtime->unmap_region(ctx, locator);
+       
+
+  ArgumentMap local_args;
+  for (int idx = 0; idx < num_pieces; idx++)
+  {
+    DomainPoint point = DomainPoint::from_point<1>(Point<1>(idx));
+    local_args.set_point(point, TaskArgument(&(pieces[idx]),sizeof(CircuitPiece)));
+  }
+
+  // Make the launchers
+  Rect<1> launch_rect(Point<1>(0), Point<1>(num_pieces-1)); 
+  Domain launch_domain = Domain::from_rect<1>(launch_rect);
+
+  Partitions parts = partitions;
+
+  CalcNewCurrentsTask cnc_launcher(parts.pvt_wires, parts.pvt_nodes, parts.shr_nodes, parts.ghost_nodes, parts.inside_nodes,
+                                   ckt.all_wires, ckt.all_nodes, launch_domain, local_args);
+
+  bool simulation_success = true;
+
+  std::cout << "Before dispatching ..." << std::endl;
+
+  TaskHelper::dispatch_task<CalcNewCurrentsTask>(cnc_launcher, ctx, runtime, false, simulation_success, true);
+                                                   
+  std::cout << "After dispatching ..." << std::endl;
+
+
+
+  
+  //{
+  //  printf("num_pieces is %d !!!\n", num_pieces);
+  //  for (int i = 0; i < nrows; i++)
+  //  {
+  //      int idx = partition[i][j];
+  //      printf("idx is %d\n", idx);
+  //      ptr_t node_ptr = get_ith_ptr(runtime, ctx, ckt.all_nodes.get_index_space(), idx);
+  //      pvt_ptrs[i].push_back(node_ptr);
+
+  //      //fa_node_value.write(node_ptr, vec[idx]);
+  //      fa_node_result.write(node_ptr, 0.0);
+  //      //fa_node_offset.write(node_ptr, b[idx]);
+
+  //      // Just put everything in everyones private map at the moment       
+  //      // We'll pull pointers out of here later as nodes get tied to 
+  //      // wires that are non-local
+  //      private_node_map[i].points.insert(node_ptr); // The private nodes in a piece
+  //      privacy_map[0].points.insert(node_ptr);      // All the private nodes
+  //      locator_node_map[i].points.insert(node_ptr);
+  //      printf("i = %d\n", i);
+  //      printf("the size is %d\n", (int)piece_node_ptrs[i].size());
+	//      //piece_node_ptrs[i].push_back(node_ptr);
+  //      inside_node_map[i].points.insert(node_ptr);  // The private and shared nodes in a piece
+  //  }
+  //}
+
+  
+
+
+}
 void SpMatrix::old_print(void) {
   std::cout << "Inside old_print():" << std::endl;
   
@@ -675,7 +825,7 @@ ptr_t get_ith_ptr(HighLevelRuntime *runtime, Context ctx, IndexSpace index_space
 int get_piece_num(std::vector<std::vector<int> > &partition, int num)
 {
   for (int i = 0; i < (int)partition.size(); i++)
-    for (int j = 0; j < (int) partition.size(); j++)
+    for (int j = 0; j < (int) partition[i].size(); j++) // Have made the change
       if (num == partition[i][j])
         return i;
   return -1;
@@ -795,7 +945,6 @@ void SpMatrix::set_up_mat(Context ctx, HighLevelRuntime *runtime)
   //}
 
   //TODO:: the first_nodes are useless now!!!!
-  printf("BBBBB\n");
   {
     printf("num_pieces is %d !!!\n", num_pieces);
     for (int i = 0; i < num_pieces; i++)
@@ -803,7 +952,7 @@ void SpMatrix::set_up_mat(Context ctx, HighLevelRuntime *runtime)
       for (int j = 0; j < (int)partition[i].size(); j++)
       {
         int idx = partition[i][j];
-        printf("idx is %d\n", idx);
+        //printf("idx is %d\n", idx);
         ptr_t node_ptr = get_ith_ptr(runtime, ctx, ckt.all_nodes.get_index_space(), idx);
         pvt_ptrs[i].push_back(node_ptr);
 
@@ -817,8 +966,8 @@ void SpMatrix::set_up_mat(Context ctx, HighLevelRuntime *runtime)
         private_node_map[i].points.insert(node_ptr); // The private nodes in a piece
         privacy_map[0].points.insert(node_ptr);      // All the private nodes
         locator_node_map[i].points.insert(node_ptr);
-        printf("i = %d\n", i);
-        printf("the size is %d\n", (int)piece_node_ptrs[i].size());
+        //printf("i = %d\n", i);
+        //printf("the size is %d\n", (int)piece_node_ptrs[i].size());
 	      //piece_node_ptrs[i].push_back(node_ptr);
         inside_node_map[i].points.insert(node_ptr);  // The private and shared nodes in a piece
       }

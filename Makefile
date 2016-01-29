@@ -3,7 +3,7 @@ $(error LG_RT_DIR variable is not defined, aborting build)
 endif
 
 #Flags for directing the runtime makefile what to include
-DEBUG=0                   # Include debugging symbols
+DEBUG=1                   # Include debugging symbols
 OUTPUT_LEVEL=LEVEL_DEBUG  # Compile time print level
 SHARED_LOWLEVEL=0	  # Use the shared low level
 USE_CUDA=0		  # to activate/deactivate cuda
@@ -12,7 +12,7 @@ USE_CUDA=0		  # to activate/deactivate cuda
 # Put the binary file name here
 OUTFILE		:= main 
 # List all the application source files here
-GEN_SRC		:= main.cc mmio.cc# .cc files
+GEN_SRC		:= main.cc mmio.cc circuit_cpu.cc# .cc files
 GEN_GPU_SRC	:=				# .cu files
 
 # You can modify these variables, some will be appended to by the runtime makefile
@@ -109,5 +109,5 @@ include $(LG_RT_DIR)/runtime.mk
 #clean:
 #	@$(RM) -rf $(GEN_OBJS) $(OUTFILE)
 #
-#cleanall:
-#	@$(RM) -rf $(ALL_OBJS) $(OUTFILE)
+cleanall:
+	@$(RM) -rf $(ALL_OBJS) $(OUTFILE)

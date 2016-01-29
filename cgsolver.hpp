@@ -46,6 +46,7 @@ bool CGSolver<T>::Solve(SpMatrix &A,
 		   
 	if(nitermax == -1) nitermax = A.nrows;
 
+  printf("the size is %d\n", (int) x.size);
 	Array<T> r_old(x.size, x.nparts, ctx, runtime);
 	Array<T> p(x.size, x.nparts, ctx, runtime);
 	Array<T> A_p(x.size, x.nparts, ctx, runtime);
@@ -53,8 +54,19 @@ bool CGSolver<T>::Solve(SpMatrix &A,
   Predicate loop_pred = Predicate::TRUE_PRED;
 
 	// Ap = A * x	
-	spmv(A, x, A_p, loop_pred, ctx, runtime);
+	//spmv(A, x, A_p, loop_pred, ctx, runtime);
+
+  printf("Before the SPMV!!!\n");
+  printf("Before the ADDED\n");
+  //A.print_nodes(ctx, runtime);
+  //IndexIterator itr_read(runtime, ctx, x.is);
+	std::cout<<"Before SPMV~"<<std::endl;
+  
+  A.spmv(x, A_p, ctx, runtime);
 	std::cout<<"Ax = A * x is done."<<std::endl;
+
+  printf("After the SPMV!!!\n");
+  //A.print_nodes(ctx, runtime);
 
 	// r_old = b - Ap
 	subtract(b, A_p, r_old, T(1.0), ctx, runtime);
@@ -87,28 +99,37 @@ bool CGSolver<T>::Solve(SpMatrix &A,
 		niter++;
 
 		// Ap = A * p
+    std::cout << "AAA" << std::endl;
 		spmv(A, p, A_p, loop_pred, ctx, runtime);
 
 		// r2 = r' * r
+    std::cout << "BBB" << std::endl;
 		r2_old = dot(r_old, r_old, loop_pred, r2_old, ctx, runtime);
 
 		// pAp = p' * A * p
+    std::cout << "CCC" << std::endl;
 		pAp = dot(p, A_p, loop_pred, pAp, ctx, runtime);	
 
 		// alpha = r2 / pAp
+    std::cout << "DDD" << std::endl;
 		alpha = compute_scalar<T>(r2_old, pAp, loop_pred, alpha, ctx, runtime);	
 	
 		// x = x + alpha * p
+    std::cout << "EEE" << std::endl;
 		add_inplace(x, p, alpha, loop_pred, ctx, runtime);
 	
 		// r_old = r_old - alpha * A_p
+    std::cout << "FFF" << std::endl;
     subtract_inplace(r_old, A_p, alpha, loop_pred, ctx, runtime);
 
+    std::cout << "GGG" << std::endl;
 		r2_new = dot(r_old, r_old, loop_pred, r2_new, ctx, runtime);
 
+    std::cout << "HHH" << std::endl;
 		beta = compute_scalar<T>(r2_new, r2_old, loop_pred, beta, ctx, runtime);
 	
 		// p = r_old + beta*p
+    std::cout << "III" << std::endl;
     axpy_inplace(r_old, p, beta, loop_pred, ctx, runtime);
 #ifdef PREDICATED_EXECUTION
     Future norm = dot(r_old, r_old, loop_pred, 
