@@ -278,6 +278,8 @@ void Initialize_Task(const Task *task,
 
 template<typename T>
 void Array<T>::PrintVals(Context ctx, HighLevelRuntime *runtime) {
+  
+  std::cout << "Inside Array::PrintVals..." << std::endl;
 
 	RegionRequirement req(lr, READ_ONLY, EXCLUSIVE, lr);
   req.add_field(FID_X);

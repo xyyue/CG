@@ -140,6 +140,9 @@ void top_level_task(const Task *task,
    	
 	// get naprts from the custom mapper
 	nparts = runtime->get_tunable_value(ctx, SUBREGION_TUNABLE, 0);
+  std::cout << "================================" << std::endl;
+  std::cout << "nparts = " << nparts << std::endl;
+  std::cout << "================================" << std::endl;
 	
 	Params<double> params;
 	if(!inputmat && !inputrhs) {
@@ -158,7 +161,7 @@ void top_level_task(const Task *task,
 			params.InitRhs(rhs_file);
 		}		
   }
-		
+	params.PrintRhsVals();	
 	std::cout<<"Problem generation is done. Some properties are as follows:"<<std::endl;
 	std::cout<<"*******************************************************"<<std::endl;
 
@@ -222,16 +225,16 @@ void top_level_task(const Task *task,
     circuit.node_locator = runtime->create_logical_region(ctx,node_index_space,locator_field_space);
     runtime->attach_name(circuit.node_locator, "node_locator");
 
-    std::cout << "the tree ids for circuit is: " << std::endl;
-    std::cout << circuit.all_nodes.get_tree_id() << std::endl;
-    std::cout << circuit.all_wires.get_tree_id() << std::endl;
-    std::cout << circuit.node_locator.get_tree_id() << std::endl;
+    //std::cout << "the tree ids for circuit is: " << std::endl;
+    //std::cout << circuit.all_nodes.get_tree_id() << std::endl;
+    //std::cout << circuit.all_wires.get_tree_id() << std::endl;
+    //std::cout << circuit.node_locator.get_tree_id() << std::endl;
 
-    std::cout << "the tree ids for A.ckt is: " << std::endl;
+    //std::cout << "the tree ids for A.ckt is: " << std::endl;
 
-    std::cout << A.ckt.all_nodes.get_tree_id() << std::endl;
-    std::cout << A.ckt.all_wires.get_tree_id() << std::endl;
-    std::cout << A.ckt.node_locator.get_tree_id() << std::endl;
+    //std::cout << A.ckt.all_nodes.get_tree_id() << std::endl;
+    //std::cout << A.ckt.all_wires.get_tree_id() << std::endl;
+    //std::cout << A.ckt.node_locator.get_tree_id() << std::endl;
   }
 
   A.set_up_mat(ctx, runtime);
@@ -244,14 +247,18 @@ void top_level_task(const Task *task,
   //IndexIterator itr_read(runtime, ctx, x.is);
 
 	x.Initialize(ctx, runtime);
-  //x.PrintVals(ctx, runtime);
+  x.PrintVals(ctx, runtime);
 
 	// build rhs vector
 	std::cout<<"Make rhs vector..."<<std::endl;
 	Array<double> b(params.nrows, nparts, ctx, runtime);
 	std::cout<<"After making rhs vector..."<<std::endl;
 	
+  //TODO:!inputmat
 	if(inputmat && !inputrhs) {	
+    std::cout << "=======================" << std::endl;
+    std::cout << "Inside the if statment!" << std::endl;
+    std::cout << "=======================" << std::endl;
 		// fill rhs using random x vector
 		Array<double> x_rand(params.nrows, nparts, ctx, runtime);
 		x_rand.RandomInit(ctx, runtime);
@@ -259,15 +266,27 @@ void top_level_task(const Task *task,
 		spmv(A, x_rand, b, loop_pred, ctx, runtime);
 	}
 	else {
-	  std::cout<<" Inside the else..."<<std::endl;
+    //std::cout << "=======================" << std::endl;
+    //std::cout << "Inside the else statment!" << std::endl;
+    //std::cout << "=======================" << std::endl;
 	  // otherwise use the rhs array in params
+	  std::cout<<"Before Initializing b ..."<<std::endl;
+    //std::cout << "=======================" << std::endl;
+    //b.PrintVals(ctx, runtime); 
+    //std::cout << "=======================" << std::endl;
 		b.Initialize(params.rhs, ctx, runtime);	
 	  std::cout<<"After Initializing b ..."<<std::endl;
+    //std::cout << "=======================" << std::endl;
+    //b.PrintVals(ctx, runtime); 
+    //std::cout << "=======================" << std::endl;
+
 	}
   //b.PrintVals(ctx, runtime);
 		
-	std::cout<<"Launch the CG solver..."<<std::endl;	
-	std::cout<<std::endl;
+  std::cout << "=======================" << std::endl;
+	std::cout << "Launch the CG solver..." << std::endl;	
+  std::cout << "=======================" << std::endl;
+	std::cout << std::endl;
 
 	
 	// run CG solver

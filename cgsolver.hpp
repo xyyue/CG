@@ -47,6 +47,8 @@ bool CGSolver<T>::Solve(SpMatrix &A,
 	if(nitermax == -1) nitermax = A.nrows;
 
   printf("the size is %d\n", (int) x.size);
+  printf("the nparts is %d\n", (int) x.nparts);
+
 	Array<T> r_old(x.size, x.nparts, ctx, runtime);
 	Array<T> p(x.size, x.nparts, ctx, runtime);
 	Array<T> A_p(x.size, x.nparts, ctx, runtime);
@@ -62,6 +64,7 @@ bool CGSolver<T>::Solve(SpMatrix &A,
   //IndexIterator itr_read(runtime, ctx, x.is);
 	std::cout<<"Before SPMV~"<<std::endl;
   
+  // FIXME: A.spmv(x, A_p, ctx, runtime);
   A.spmv(x, A_p, ctx, runtime);
 	std::cout<<"Ax = A * x is done."<<std::endl;
 

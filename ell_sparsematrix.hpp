@@ -139,8 +139,6 @@ class SpMatrix{
   std::vector<CircuitPiece> pieces;
   int num_pieces;
   Partitions partitions;
-
-
   /***************newly added*********************/
 
 	SpMatrix(void);
@@ -234,17 +232,20 @@ void SpMatrix::spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *r
 
   Rect<1> rect(Point<1>(0), Point<1> (nrows - 1));
   GenericPointInRectIterator<1> pir(rect);
-
+  x.PrintVals(ctx, runtime);
+  std::cout << "===============" << std::endl;
   std::cout << "The values are:" << std::endl;
+  std::cout << "===============" << std::endl;
   for (int n = 0; n < nrows; n++)
   {
     assert(itr.has_next());
     ptr_t node_ptr = itr.next();
 
     double val = acc_x.read(DomainPoint::from_point<1>(pir.p));
-    //printf("%d: The val is: %f \n", n, val);
+    printf("%d: The val is: %f \n", n, val);
 
     fa_node_value.write(node_ptr, val);
+    pir++;
   }
   std::cout << "The process is over!" << std::endl;
 
@@ -464,6 +465,7 @@ void SpMatrix::Print(Context ctx, HighLevelRuntime *runtime) {
 
 	RegionAccessor<AccessorType::Generic, int64_t> acc_num_nzeros =
     init_region1.get_field_accessor(FID_NZEROS_PER_ROW).typeify<int64_t>();
+
 
 	InlineLauncher init_launcher2(req2);
   PhysicalRegion init_region2 = runtime->map_region(ctx, init_launcher2);

@@ -32,7 +32,17 @@ class Params{
 	void InitRhs(std::string rhs_file);
 	~Params(void);
 	void GenerateVals(void);
+  void PrintRhsVals(void);
 };
+
+template<typename T>
+void Params<T>::PrintRhsVals(void) {
+
+  std::cout << "The values of the RHS :" << std::endl;
+
+  for (int i = 0; i < nrows; i++)
+    std::cout << rhs[i] << std::endl; 
+}
 
 template<typename T>
 void Params<T>::Init(int nx) {
