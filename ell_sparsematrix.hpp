@@ -191,31 +191,25 @@ void SpMatrix::print_nodes(Context ctx, HighLevelRuntime *runtime) {
 
 template <typename T>
 void SpMatrix::spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *runtime) {
-  printf("Starting Sparse Matrix SPMV...\n");
+  std::cout << "==============================" << std::endl;
+  std::cout << "Starting Sparse Matrix SPMV..." << std::endl;
+  std::cout << "==============================" << std::endl;
   // inline map physical instances for the nodes and wire regions
   RegionRequirement nodes_req(ckt.all_nodes, READ_WRITE, EXCLUSIVE, ckt.all_nodes);
   nodes_req.add_field(FID_NODE_VALUE);
   nodes_req.add_field(FID_NODE_RESULT);
   //nodes_req.add_field(FID_NODE_OFFSET);
-
-  RegionRequirement locator_req(ckt.node_locator, READ_WRITE, EXCLUSIVE, ckt.node_locator);
-  locator_req.add_field(FID_LOCATOR);
-
   InlineLauncher nodes_launcher(nodes_req);
   PhysicalRegion nodes = runtime->map_region(ctx, nodes_req);
-  InlineLauncher locator_launcher(locator_req);
-  PhysicalRegion locator = runtime->map_region(ctx, locator_req);
-
 
   nodes.wait_until_valid();
   RegionAccessor<AccessorType::Generic, double> fa_node_value = 
     nodes.get_field_accessor(FID_NODE_VALUE).typeify<double>();
   //TODO
-  //RegionAccessor<AccessorType::Generic, double> fa_node_result = 
-  //  nodes.get_field_accessor(FID_NODE_RESULT).typeify<double>();
+  RegionAccessor<AccessorType::Generic, double> fa_node_result = 
+    nodes.get_field_accessor(FID_NODE_RESULT).typeify<double>();
   //RegionAccessor<AccessorType::Generic, double> fa_node_offset = 
   //  nodes.get_field_accessor(FID_NODE_OFFSET).typeify<double>();
-
 
 	RegionRequirement req(x.lr, READ_ONLY, EXCLUSIVE, x.lr);
   req.add_field(FID_X); //x.fid
@@ -232,7 +226,7 @@ void SpMatrix::spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *r
 
   Rect<1> rect(Point<1>(0), Point<1> (nrows - 1));
   GenericPointInRectIterator<1> pir(rect);
-  x.PrintVals(ctx, runtime);
+  //x.PrintVals(ctx, runtime);
   std::cout << "===============" << std::endl;
   std::cout << "The values are:" << std::endl;
   std::cout << "===============" << std::endl;
@@ -249,10 +243,23 @@ void SpMatrix::spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *r
   }
   std::cout << "The process is over!" << std::endl;
 
+  //std::cout << "========================================" << std::endl;
+  //std::cout << "================Read again==============" << std::endl;
+  //IndexIterator itr11(runtime, ctx, ckt.all_nodes.get_index_space());
+  //for (int n = 0; n < nrows; n++)
+  //{
+  //  assert(itr11.has_next());
+  //  ptr_t node_ptr = itr11.next();
 
-  runtime->unmap_region(ctx, init_region);
-  runtime->unmap_region(ctx, nodes);
-  runtime->unmap_region(ctx, locator);
+  //  double val = fa_node_value.read(node_ptr);
+  //  printf("%d: The val is: %f \n", n, val);
+
+  //}
+  std::cout << "========================================" << std::endl;
+
+  //runtime->unmap_region(ctx, init_region);
+  //runtime->unmap_region(ctx, nodes);
+  //runtime->unmap_region(ctx, locator);
        
 
   ArgumentMap local_args;
@@ -280,8 +287,62 @@ void SpMatrix::spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *r
   std::cout << "After dispatching ..." << std::endl;
 
 
+  //RegionRequirement nodes_req1(ckt.all_nodes, READ_WRITE, EXCLUSIVE, ckt.all_nodes);
+  //nodes_req1.add_field(FID_NODE_VALUE);
+  //nodes_req1.add_field(FID_NODE_RESULT);
+  ////nodes_req.add_field(FID_NODE_OFFSET);
+  //InlineLauncher nodes_launcher1(nodes_req1);
+  //PhysicalRegion nodes1 = runtime->map_region(ctx, nodes_req1);
 
-  
+  //std::cout << "-1-1-1" << std::endl;
+  //nodes1.wait_until_valid();
+  //std::cout << "000" << std::endl;
+  //RegionAccessor<AccessorType::Generic, double> fa_node_result = 
+  //  nodes.get_field_accessor(FID_NODE_RESULT).typeify<double>();
+
+  //std::cout << "111" << std::endl;
+
+  // TODO: This can be WRITE_DISCARD
+	RegionRequirement req1(A_p.lr, READ_WRITE, EXCLUSIVE, A_p.lr);
+  req1.add_field(FID_X); //x.fid
+
+  InlineLauncher init_launcher1(req1);
+  PhysicalRegion init_region1 = runtime->map_region(ctx, init_launcher1);
+  init_region1.wait_until_valid();
+
+  RegionAccessor<AccessorType::Generic, T> acc_ap =
+    init_region1.get_field_accessor(FID_X).typeify<T>();
+
+
+  //std::cout << "222" << std::endl;
+
+  IndexIterator itr1(runtime, ctx, ckt.all_nodes.get_index_space());
+
+  Rect<1> rect1(Point<1>(0), Point<1> (nrows - 1));
+  GenericPointInRectIterator<1> pir1(rect1);
+
+  std::cout << "The values of the results are: " << std::endl;
+  for (int n = 0; n < nrows; n++)
+  {
+    assert(itr1.has_next());
+    ptr_t node_ptr = itr1.next();
+
+    //double val = acc_ap.read(DomainPoint::from_point<1>(pir1.p));
+    //fa_node_value.write(node_ptr, val);
+    double val = fa_node_result.read(node_ptr);
+    std::cout << val << std::endl;
+
+    acc_ap.write(DomainPoint::from_point<1>(pir1.p), val);
+
+    pir1++;
+
+  std::cout << "=============================" << std::endl;
+
+
+  runtime->unmap_region(ctx, init_region);
+  runtime->unmap_region(ctx, init_region1);
+  runtime->unmap_region(ctx, nodes);
+
   //{
   //  printf("num_pieces is %d !!!\n", num_pieces);
   //  for (int i = 0; i < nrows; i++)
@@ -311,7 +372,9 @@ void SpMatrix::spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *r
   
 
 
+    }
 }
+
 void SpMatrix::old_print(void) {
   std::cout << "Inside old_print():" << std::endl;
   
@@ -366,7 +429,7 @@ void SpMatrix::dense_to_sparse(void) {
   int size = mat.size();
   for (int i = 0; i < size; i++)
     for (int j = i; j < size; j++)
-      if (mat[i][j] > 1e-5)
+      if (mat[i][j] > 1e-5 || mat[i][j] < 1e-5)
       {
         SparseElem temp;
         temp.x = i;
@@ -948,13 +1011,14 @@ void SpMatrix::set_up_mat(Context ctx, HighLevelRuntime *runtime)
 
   //TODO:: the first_nodes are useless now!!!!
   {
-    printf("num_pieces is %d !!!\n", num_pieces);
+    printf("\nnum_pieces is %d !!!\n", num_pieces);
     for (int i = 0; i < num_pieces; i++)
     {
+      std::cout << "Piece # " << i << ":" << std::endl;
       for (int j = 0; j < (int)partition[i].size(); j++)
       {
         int idx = partition[i][j];
-        //printf("idx is %d\n", idx);
+        printf("idx is %d\n", idx);
         ptr_t node_ptr = get_ith_ptr(runtime, ctx, ckt.all_nodes.get_index_space(), idx);
         pvt_ptrs[i].push_back(node_ptr);
 
@@ -1043,7 +1107,8 @@ void SpMatrix::set_up_mat(Context ctx, HighLevelRuntime *runtime)
       //ptr_t p2 = piece_node_ptrs[m2][n2];
       ptr_t p2 = get_ith_ptr(runtime, ctx, ckt.all_nodes.get_index_space(), sparse_mat[i].y);
       fa_wire_out_ptr.write(wire_ptr, p2);
-
+      std::cout << "The wire value is : " << sparse_mat[i].z << std::endl;
+      std::cout << "[" << p1.value << ", " << p2.value << ", " << sparse_mat[i].z << ")" << std::endl;
       fa_wire_value.write(wire_ptr, sparse_mat[i].z); 
 
       int m1 = get_piece_num(partition, sparse_mat[i].x);
@@ -1172,14 +1237,32 @@ void SpMatrix::set_up_mat(Context ctx, HighLevelRuntime *runtime)
 
   char buf[100];
   // Build the pieces
+  std::cout << "================================" << std::endl;
+  std::cout << "========Before the loop=========" << std::endl;
+  std::cout << "================================" << std::endl;
   for (int n = 0; n < num_pieces; n++)
   {
     pieces[n].pvt_nodes = runtime->get_logical_subregion_by_color(ctx, result.pvt_nodes, n);
+    LogicalRegion lr = runtime->get_logical_subregion_by_color(ctx, result.inside_nodes, n);
+
+    IndexIterator itr(runtime, ctx, lr.get_index_space());
+    //for (int n = 0; n < nrows; n++)
+    std::cout << "The part # is: " << n << std::endl;
+    while (itr.has_next())
+    {
+      ptr_t node_ptr = itr.next();
+      //double val = fa_node_value.read(node_ptr);
+      std::cout << "The # inside this part is: " << node_ptr.value << std::endl;
+    }
+
+
     sprintf(buf, "private_nodes_of_piece_%d", n);
     runtime->attach_name(pieces[n].pvt_nodes, buf);
+
     pieces[n].shr_nodes = runtime->get_logical_subregion_by_color(ctx, result.shr_nodes, n);
     sprintf(buf, "shared_nodes_of_piece_%d", n);
     runtime->attach_name(pieces[n].shr_nodes, buf);
+
     pieces[n].ghost_nodes = runtime->get_logical_subregion_by_color(ctx, result.ghost_nodes, n);
     sprintf(buf, "ghost_nodes_of_piece_%d", n);
     runtime->attach_name(pieces[n].ghost_nodes, buf);

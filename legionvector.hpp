@@ -261,7 +261,7 @@ void Initialize_Task(const Task *task,
 		GenericPointInRectIterator<1> itr(rect);
 
     for(int i=0; i < rect.volume(); i++) {
-      acc_x.write(DomainPoint::from_point<1>(itr.p), 0.0);   // Should be 0
+      acc_x.write(DomainPoint::from_point<1>(itr.p), 1.0);   // Should be 0
       itr++;
     }
   }
@@ -269,7 +269,7 @@ void Initialize_Task(const Task *task,
   {
     const size_t volume = rect.volume();
     for (int i = 0; i < volume; i++) {
-      x_ptr[i] = 0.0;
+      x_ptr[i] = 1.0;
     }
   }
 	

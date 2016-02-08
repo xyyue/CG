@@ -52,6 +52,7 @@ bool CGSolver<T>::Solve(SpMatrix &A,
 	Array<T> r_old(x.size, x.nparts, ctx, runtime);
 	Array<T> p(x.size, x.nparts, ctx, runtime);
 	Array<T> A_p(x.size, x.nparts, ctx, runtime);
+  A_p.Initialize(ctx, runtime);
 
   Predicate loop_pred = Predicate::TRUE_PRED;
 
@@ -65,7 +66,24 @@ bool CGSolver<T>::Solve(SpMatrix &A,
 	std::cout<<"Before SPMV~"<<std::endl;
   
   // FIXME: A.spmv(x, A_p, ctx, runtime);
-  A.spmv(x, A_p, ctx, runtime);
+  std::cout << "=====================================" << std::endl;
+  std::cout << "This is the " << 0 << " call of spmv.." << std::endl;
+  std::cout << "=====================================" << std::endl;
+
+  std::cout << "=======================" << std::endl;
+  std::cout << "Before the Multiplication, b's value:" << std::endl;
+  b.PrintVals(ctx, runtime);
+  std::cout << "Before the Multiplication, A_p's value:" << std::endl;
+  A_p.PrintVals(ctx, runtime);
+  std::cout << "=======================" << std::endl;
+  A.Print(ctx, runtime);
+  A.spmv(b, A_p, ctx, runtime);
+  std::cout << "=======================" << std::endl;
+  std::cout << "After the Multiplication:" << std::endl;
+  A_p.PrintVals(ctx, runtime);
+  std::cout << "=======================" << std::endl;
+
+  exit(0);
 	std::cout<<"Ax = A * x is done."<<std::endl;
 
   printf("After the SPMV!!!\n");
@@ -103,7 +121,8 @@ bool CGSolver<T>::Solve(SpMatrix &A,
 
 		// Ap = A * p
     std::cout << "AAA" << std::endl;
-		spmv(A, p, A_p, loop_pred, ctx, runtime);
+		//spmv(A, p, A_p, loop_pred, ctx, runtime);
+    A.spmv(p, A_p, ctx, runtime);
 
 		// r2 = r' * r
     std::cout << "BBB" << std::endl;
