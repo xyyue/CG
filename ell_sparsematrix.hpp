@@ -239,6 +239,7 @@ void SpMatrix::spmv(Array<T> &x, Array<T> &A_p, Context ctx, HighLevelRuntime *r
     printf("%d: The val is: %f \n", n, val);
 
     fa_node_value.write(node_ptr, val);
+    fa_node_result.write(node_ptr, 0.0);
     pir++;
   }
   std::cout << "The process is over!" << std::endl;
@@ -429,7 +430,7 @@ void SpMatrix::dense_to_sparse(void) {
   int size = mat.size();
   for (int i = 0; i < size; i++)
     for (int j = i; j < size; j++)
-      if (mat[i][j] > 1e-5 || mat[i][j] < 1e-5)
+      if (mat[i][j] > 1e-5 || mat[i][j] < -1e-5)
       {
         SparseElem temp;
         temp.x = i;
